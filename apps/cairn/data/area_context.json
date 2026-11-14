@@ -1,0 +1,51 @@
+{
+ "note": "Wikipedia summaries (CC BY-SA 4.0), fetched once during setup; Cairn reads this file locally and never fetches at runtime.",
+ "fetched": "2026-11-13",
+ "articles": [
+  {
+   "title": "Muir Woods National Monument",
+   "extract": "Muir Woods National Monument is a United States national monument managed by the National Park Service and named after naturalist John Muir. It is located on Mount Tamalpais near the Pacific coast in southwestern Marin County, California. The Monument is part of the Golden Gate National Recreation Area, and is 12 miles (19\u00a0km) north of San Francisco. It protects 554 acres (224\u00a0ha), of which 240 acres (97\u00a0ha) are old-growth coast redwood forests, one of the few such stands remaining in the San Francisco Bay Area.",
+   "source": "https://en.wikipedia.org/wiki/Muir_Woods_National_Monument"
+  },
+  {
+   "title": "Sequoia sempervirens",
+   "extract": "Sequoia sempervirens, the coast redwood, is the sole living species of the genus Sequoia in the cypress family, Cupressaceae. Other common names include coastal redwood and California redwood. It is a coniferous, long-lived, monoecious tree that has reached ages of about 2,000 years. The species has produced the tallest living trees on Earth, reaching up to 116.22\u00a0m (381.3\u00a0ft) in height and up to 8.9\u00a0m (29\u00a0ft) in diameter at breast height. These trees are also among the longest-living trees on Earth.",
+   "source": "https://en.wikipedia.org/wiki/Sequoia_sempervirens"
+  },
+  {
+   "title": "John Muir",
+   "extract": "John Muir, also known as \"John of the Mountains\" and \"Father of the National Parks\", was a Scottish-born American naturalist, author, environmental philosopher, botanist, zoologist, glaciologist, and early advocate for the preservation of wilderness in the United States.",
+   "source": "https://en.wikipedia.org/wiki/John_Muir"
+  },
+  {
+   "title": "Mount Tamalpais",
+   "extract": "Mount Tamalpais, known locally as Mount Tam, is a peak in Marin County, California, United States, often considered symbolic of Marin County. Much of Mount Tamalpais is protected within public lands such as Mount Tamalpais State Park, the Marin Municipal Water District watershed, and National Park Service land, such as Muir Woods.",
+   "source": "https://en.wikipedia.org/wiki/Mount_Tamalpais"
+  },
+  {
+   "title": "Mount Tamalpais State Park",
+   "extract": "Mount Tamalpais State Park is a California state park, located in Marin County, California. The primary feature of the park is the 2,571 feet (784\u00a0m) Mount Tamalpais. The park contains mostly redwood and oak forests. The mountain itself covers around 25,000 acres (100\u00a0km2). There are about 60 miles (97\u00a0km) of hiking trails, which are connected to a larger, 200-mile (320\u00a0km) network of trails in neighboring public lands. The park received 564,000 visitors as of 2003. Muir Woods National Monument is surrounded by the state park.",
+   "source": "https://en.wikipedia.org/wiki/Mount_Tamalpais_State_Park"
+  },
+  {
+   "title": "Dipsea Race",
+   "extract": "The Dipsea Race is a trail running event in California, United States. It is the oldest cross-country trail running event and one of the oldest foot races of any kind in the United States. The 7.5 mile (12\u00a0km) long Dipsea Race has been held annually almost every year since November 19, 1905, starting in Mill Valley, and finishing at Stinson Beach, in Marin County. Since 1983, the race has been held on the second Sunday in June. The Dipsea celebrated its 115th running on Sunday, June 14, 2026.",
+   "source": "https://en.wikipedia.org/wiki/Dipsea_Race"
+  },
+  {
+   "title": "Redwood Creek (Marin County)",
+   "extract": "Redwood Creek is a mostly perennial stream in Marin County, California. 4.7 miles (7.6\u00a0km) long, it drains a 7-square-mile (18\u00a0km2) watershed which includes the Muir Woods National Monument, and reaches the Pacific Ocean north of the Golden Gate at Muir Beach.",
+   "source": "https://en.wikipedia.org/wiki/Redwood_Creek_(Marin_County)"
+  },
+  {
+   "title": "William Kent (American politician)",
+   "extract": "William Kent was an American politician, conservationist and philanthropist from Marin County, California. He served three terms as a U.S. representative from Northern California between 1911 and 1917, and was instrumental in the creation of Muir Woods National Monument.",
+   "source": "https://en.wikipedia.org/wiki/William_Kent_(American_politician)"
+  },
+  {
+   "title": "Muir Beach, California",
+   "extract": "Muir Beach is a census designated place (CDP), unincorporated community, and beach on the Pacific Ocean. The community is located 16.5 miles (26.6\u00a0km) northwest of San Francisco in western Marin County, California, United States. Unlike many other entities in the area, it is not named directly in honor of conservationist John Muir; instead, it was named after Muir Woods National Monument to capitalize on the latter's popularity. The population was 304 at the 2020 census. The community itself flanks the northwest side of the beach.",
+   "source": "https://en.wikipedia.org/wiki/Muir_Beach%2C_California"
+  }
+ ]
+}

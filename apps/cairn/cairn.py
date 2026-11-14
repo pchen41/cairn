@@ -37,7 +37,7 @@ try:
 except ImportError:  # only --mock-llm works without it
     zetic_run = None
 
-ALLOWED_ACTIONS = ("log_alert", "nearest_bailout", "route_at_junction", "nearest_water")
+ALLOWED_ACTIONS = ("log_alert", "nearest_bailout", "route_at_junction", "nearest_water", "speak", "landmark_tip")
 EARTH_R = 6371000.0
 COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 COMPASS_WORDS = {"N": "north", "NNE": "north-northeast", "NE": "northeast", "ENE": "east-northeast",
@@ -246,9 +246,9 @@ class Omni:
         if self.mock:
             time.sleep(0.05)
             if audio:
-                text = "(mock transcript) Which way to the lake?"
+                text = "(mock transcript) Which way to Cathedral Grove?"
             else:
-                text = "(mock answer, no model ran) " + prompt[prompt.find("Facts:"):][:160]
+                text = "(mock answer, no model ran) " + prompt[prompt.find("{"):][:160]
             return {"ok": True, "text": text, "completion_tokens": 12, "finish_reason": "stop", "errors": [],
                     "timings": {"wall_s": 0.05}, "device_evidence": "mock"}
         if zetic_run is None:
@@ -278,10 +278,73 @@ class Omni:
                 "first_attempt_errors": attempts[0].get("errors", []) if len(attempts) > 1 else []}
 
 
-SAY = ("You are Cairn, an offline trail guide talking to a hiker. The navigation code computed these "
-       "facts and they are correct. Facts: {facts}. {ask}Reply with two or three short plain sentences for "
-       "the hiker. Use only the place names, trail names, directions, distances and times in the facts. "
-       "No lists, no markdown.")
+_PLAYER = {"proc": None}
+_PLAYER_LOCK = threading.Lock()
+
+
+def play_wav(path):
+    """Start aplay without waiting (kills a reply that is still playing). Returns errors as data."""
+    import subprocess
+    with _PLAYER_LOCK:
+        old = _PLAYER["proc"]
+        if old is not None and old.poll() is None:
+            old.kill()
+        try:
+            _PLAYER["proc"] = subprocess.Popen(["aplay", "-q", "-D", "plughw:0,0", path],
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return None
+        except OSError as e:
+            return "aplay failed to start: %s: %s" % (type(e).__name__, e)
+
+
+def speak_wav(omni, text, out_wav, play=True):
+    """TTS through the ZETIC CLI (--tts --out, capped at 60 tokens) under the model lock, then start aplay
+    outside the lock without waiting for playback. Errors are data."""
+    import re
+    import subprocess
+    res = {"ok": False, "wav": out_wav, "audio_s": None, "tts_wall_s": None, "play_started": None, "errors": []}
+    if omni.mock:
+        res["errors"].append("speak skipped (mock)")
+        return res
+    sdk, model = omni.sdk, omni.model
+    tag = uuid.uuid4().hex
+    cmd = [os.path.join(sdk, "bin", "zetic_lfm3_cli"), "chat", "--model", model, "--target", "v73",
+           "--lib-dir", os.path.join(sdk, "lib"), "--ctx", "2048", "--temp", "0", "--max-tokens", "60",
+           "--tts", "--out", out_wav, "[request:%s] %s" % (tag, text.strip())]
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = os.path.join(sdk, "lib") + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    with omni.lock:
+        omni.busy = "speak"
+        try:
+            t0 = time.perf_counter()
+            try:
+                cp = subprocess.run(cmd, cwd=sdk, env=env, capture_output=True, text=True, timeout=60)
+                res["tts_wall_s"] = round(time.perf_counter() - t0, 2)
+                m = re.search(r"\[speech\] (\d+) frames, ([\d.]+) s of audio", cp.stderr + cp.stdout)
+                if m:
+                    res["audio_s"] = float(m.group(2))
+                if cp.returncode != 0:
+                    res["errors"].append("tts exit %d" % cp.returncode)
+                if not os.path.isfile(out_wav) or os.path.getsize(out_wav) <= 1024:
+                    res["errors"].append("tts wrote no usable wav")
+            except (OSError, subprocess.SubprocessError) as e:
+                res["errors"].append("tts failed: %s: %s" % (type(e).__name__, e))
+        finally:
+            omni.busy = None
+    if play and not res["errors"]:
+        err = play_wav(out_wav)
+        if err:
+            res["errors"].append(err)
+        else:
+            res["play_started"] = now_iso()
+    res["ok"] = not res["errors"]
+    return res
+
+
+SAY = ("You are Cairn, a friendly local hiking friend who knows Muir Woods and Mount Tamalpais well. Navigation facts "
+       "(computed by code, correct): {facts}. {knowledge}{earlier}{ask}Reply warmly in two or three short "
+       "sentences. Use the facts for every distance, direction and time; never invent one. If the question is "
+       "general, answer from the local knowledge. No lists, no markdown.")
 
 
 PROMPT_DROP = {"remaining_m", "bearing_deg", "limit_m", "reason", "back_to_trail_bearing_deg", "window_s",
@@ -297,10 +360,68 @@ def slim(x):
     return x
 
 
-SAY = SAY.replace("{ask}", "{earlier}{ask}")
+KNOWLEDGE_CHARS = 300
+GENERIC_WORDS = {"california", "national", "recreation", "area", "the", "and", "site"}
 
 
-def say_prompt(facts, question=None, turns=None):
+def load_area(path):
+    try:
+        with open(path) as f:
+            return json.load(f).get("articles", [])
+    except (OSError, ValueError):
+        return []
+
+
+def trim_sentences(text, limit):
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    return cut[:end + 1] if end > limit // 3 else cut.rsplit(" ", 1)[0] + "..."
+
+
+TOPIC_ALIASES = {"area": "Muir Woods National", "history": "Muir Woods National", "here": "Muir Woods National",
+                 "park": "Muir Woods National", "monument": "Muir Woods National",
+                 "redwood": "Sequoia sempervirens", "redwoods": "Sequoia sempervirens",
+                 "tree": "Sequoia sempervirens", "trees": "Sequoia sempervirens", "muir": "John Muir",
+                 "tamalpais": "Mount Tamalpais", "mountain": "Mount Tamalpais", "mount": "Mount Tamalpais",
+                 "dipsea": "Dipsea", "creek": "Redwood Creek", "salmon": "Redwood Creek", "kent": "William Kent"}
+STOP = {"what", "where", "which", "there", "this", "that", "with", "about", "tell", "know", "near", "from",
+        "have", "does", "your", "they", "them", "when", "would", "could", "should", "there", "want", "going"}
+
+
+def pick_knowledge(articles, question, places, k=2):
+    """Pick at most k snippets in code: the question's words (and topic aliases) weigh most, then the
+    destination and nearby place names. Falls back to Muir Woods National Monument. About KNOWLEDGE_CHARS in total."""
+    q = (question or "").lower()
+    pl = " ".join(x for x in places if x).lower()
+    qwords = [w.strip("?.,!'") for w in q.split()]
+    qwords = [w for w in qwords if len(w) > 3 and w not in STOP]
+    scored = []
+    for a in articles:
+        title = a.get("title", "")
+        tl = title.lower()
+        core = tl.split(" (")[0].split(",")[0]
+        body = tl + " " + a.get("extract", "").lower()
+        tw = [w for w in tl.replace("(", " ").replace(")", " ").replace(",", " ").split()
+              if len(w) > 3 and w not in GENERIC_WORDS]
+        score = 3 * sum(1 for w in tw if w in q) + sum(1 for w in qwords if w in body)
+        score += sum(5 for w, t in TOPIC_ALIASES.items() if w in qwords and title.startswith(t))
+        score += 2 * (core in pl) + sum(1 for w in tw if w in pl)
+        if score:
+            scored.append((score, title, a))
+    scored.sort(key=lambda x: -x[0])
+    chosen = [a for _, _, a in scored[:k]]
+    if not chosen:
+        chosen = [a for a in articles if a.get("title") == "Muir Woods National Monument"][:1]
+    if not chosen:
+        return []
+    per = KNOWLEDGE_CHARS // len(chosen)
+    return [{"title": a["title"], "text": trim_sentences(a.get("extract", ""), per)} for a in chosen]
+
+
+def say_prompt(facts, question=None, turns=None, knowledge=None):
     facts = slim(facts)
     ask = "The hiker asked: \"%s\". " % question.strip().replace('"', "'") if question else ""
     earlier = ""
@@ -308,7 +429,10 @@ def say_prompt(facts, question=None, turns=None):
         earlier = "Earlier: " + " ".join('Q "%s" A "%s".' % (t["q"][:80].replace('"', "'"),
                                                                (t["a"] or "")[:120].replace('"', "'"))
                                          for t in turns[-2:]) + " "
-    return SAY.format(facts=json.dumps(facts, separators=(",", ":")), earlier=earlier, ask=ask)
+    know = ""
+    if knowledge:
+        know = "Local knowledge: " + " ".join("%s: %s" % (k["title"], k["text"]) for k in knowledge) + " "
+    return SAY.format(facts=json.dumps(facts, separators=(",", ":")), knowledge=know, earlier=earlier, ask=ask)
 
 
 # ---------------------------------------------------------------- the agent
@@ -323,7 +447,13 @@ class Cairn:
         self.still_s = args.still_s
         self.still_m = args.still_m
         self.junction_m = args.junction_m
+        self.landmark_m = getattr(args, "landmark_m", 150.0)
         self.log_path = args.log
+        self.area = load_area(os.path.join(DATA, "area_context.json"))
+        self.speak_enabled = bool(getattr(args, "speak", False))
+        self.speak_async = getattr(args, "cmd", "") == "serve"
+        self.rec_dir = os.path.join(HERE, "recordings")
+        os.makedirs(self.rec_dir, exist_ok=True)
         self.lock = threading.RLock()
         self.records = []
         self.log_file = open(self.log_path, "a")
@@ -344,6 +474,7 @@ class Cairn:
             self.turns = collections.deque(maxlen=6)  # {q, a}
             self.itinerary = []  # ordered destination node ids
             self.reached = set()
+            self.told_landmarks = set()  # each landmark tip fires once per session
 
     # ---- location history and itinerary (all in code)
     def target(self):
@@ -468,7 +599,9 @@ class Cairn:
 
         junction = None
         nn = T.nearest_node(p)
-        if "junction" in T.nodes[nn]["kinds"] and haversine(p, T.pos(nn)) <= self.junction_m:
+        # a real crossroads (3+ trails) or a destination; plain bridges along one trail do not count
+        crossroads = len(T.adj[nn]) >= 3 or "destination" in T.nodes[nn]["kinds"]
+        if crossroads and haversine(p, T.pos(nn)) <= self.junction_m:
             junction = nn
         new_alerts = [k for k, v in rules.items() if v.get("fired") and k not in self.active]
         self.active = {k for k, v in rules.items() if v.get("fired")}
@@ -494,6 +627,8 @@ class Cairn:
             return {"name": name, "result": T.nearest_of_kind(p, "water")}
         if name == "route_at_junction":
             return {"name": name, "result": T.route(p, self.target(), self.junction_m)}
+        if name == "landmark_tip":
+            return {"name": name, "result": {"landmark": decision.get("approaching_landmark")}}
         return {"name": name, "result": "refused"}
 
     def act(self, proposals, p, decision):
@@ -502,6 +637,80 @@ class Cairn:
             a = self.run_action(name, p, decision)
             (refused if isinstance(a["result"], str) and a["result"].startswith("refused") else actions).append(a)
         return actions, refused
+
+    def maybe_speak(self, rec, text):
+        """Allowlisted 'speak' action after a successful answer. In serve it runs in a background thread
+        (TTS under the model lock, aplay not awaited) so the HTTP answer returns at once; the result is
+        logged as its own 'speak' record that the UI picks up by polling."""
+        if not text or not self.speak_enabled:
+            return
+        if "speak" not in ALLOWED_ACTIONS:
+            rec.setdefault("refused", []).append({"name": "speak", "result": "refused: not on the allowlist"})
+            return
+        name = "reply-%s.wav" % uuid.uuid4().hex
+        rec["speech_pending"] = True
+
+        def job():
+            res = speak_wav(self.omni, text, os.path.join(self.rec_dir, name))
+            srec = {"t": now_iso(), "kind": "speak", "for": rec.get("kind"), "errors": [],
+                    "actions": [{"name": "speak", "result": res}]}
+            if res["ok"]:
+                srec["speech_url"] = "/api/audio/" + name
+            elif not self.omni.mock:
+                srec["errors"].append("speak failed: %s" % "; ".join(res["errors"])[:300])
+            self.write(srec)
+
+        if self.speak_async:
+            threading.Thread(target=job, daemon=True).start()
+        else:
+            job()
+
+    def knowledge_for(self, rec, question, *parts):
+        k = pick_knowledge(self.area, question, parts)
+        rec["knowledge"] = [x["title"] for x in k]
+        return k
+
+    def recent_pace(self, t, window_s=600):
+        pts = [(tt, q) for tt, q in self.history if (t - tt).total_seconds() <= window_s]
+        if len(pts) < 2:
+            return None
+        span = (pts[-1][0] - pts[0][0]).total_seconds()
+        if span < 120:
+            return None
+        return sum(haversine(a[1], b[1]) for a, b in zip(pts, pts[1:])) / span
+
+    def landmark_ahead(self, t, p):
+        """Nearest untold landmark within landmark_m that is on the route or ahead in the direction of travel.
+        Returns facts computed in code (distance, bearing, ETA at recent pace), or None."""
+        T = self.trails
+        r = T.route(p, self.target(), self.junction_m)
+        on_route = set((r or {}).get("via", []))
+        moving = None
+        for b in reversed(self.breadcrumbs[:-1]):
+            q = (b["lat"], b["lon"])
+            if haversine(q, p) >= 40:
+                moving = bearing(q, p)
+                break
+        best = None
+        for nid, n in T.nodes.items():
+            if "landmark" not in n or nid in self.told_landmarks:
+                continue
+            d = haversine(p, T.pos(nid))
+            if d > self.landmark_m:
+                continue
+            deg = bearing(p, T.pos(nid))
+            ahead = moving is not None and abs((deg - moving + 180) % 360 - 180) <= 70
+            if d <= 40 or n["name"] in on_route or ahead:
+                if best is None or d < best[1]:
+                    best = (nid, d, deg)
+        if best is None:
+            return None
+        nid, d, deg = best
+        pace = self.recent_pace(t)
+        return {"id": nid, "landmark": T.name(nid), "about": T.nodes[nid]["landmark"].get("blurb"),
+                "distance_m": round_m(d), "heading": COMPASS_WORDS[compass(deg)], "bearing_deg": int(round(deg)),
+                "eta_min": int(round(d / pace / 60.0)) if pace and pace > 0.05 and d > 40 else None,
+                "here_now": d <= 40, "story": T.nodes[nid]["landmark"].get("story", [])}
 
     # ---- one iteration of the always-on loop
     def observe(self, t, p, source):
@@ -533,6 +742,13 @@ class Cairn:
                     proposals += ["log_alert", "nearest_bailout"]
                 if jid:
                     proposals.append("route_at_junction")
+                # proactive guide: a landmark tip, never in the same iteration as a safety alert
+                tip = None if decision["new_alerts"] else self.landmark_ahead(t, p)
+                if tip:
+                    self.told_landmarks.add(tip["id"])
+                    decision["approaching_landmark"] = tip["landmark"]
+                    proposals.append("landmark_tip")
+                    rec["landmark_tip"] = tip["landmark"]
                 rec["proposals"] = proposals
                 actions, refused = self.act(proposals, p, decision)
                 rec["actions"], rec["refused"] = actions, refused
@@ -560,11 +776,27 @@ class Cairn:
                 if a["name"] == "route_at_junction" and a["result"]:
                     facts["at_junction"] = decision["new_junction"]
                     facts["route"] = self.route_facts(p, self.target())[1]
-            call = self.omni.call("explain", say_prompt(facts))
+                if a["name"] == "landmark_tip":
+                    a["result"] = {k: v for k, v in tip.items() if k not in ("id", "story")}
+                    facts["approaching_landmark"] = {k: v for k, v in tip.items()
+                                                     if k not in ("id", "story", "bearing_deg")}
+            if tip:  # the landmark's own story articles, trimmed in code
+                titles = set(tip["story"])
+                chosen = [a for a in self.area if a.get("title") in titles][:2]
+                per = KNOWLEDGE_CHARS // max(1, len(chosen))
+                know = [{"title": a["title"], "text": trim_sentences(a.get("extract", ""), per)} for a in chosen]
+                rec["knowledge"] = [k["title"] for k in know]
+            else:
+                know = self.knowledge_for(rec, None, self.trails.name(self.target()),
+                                          decision.get("new_junction") or "",
+                                          self.trails.name(self.trails.nearest_node(p)))
+            call = self.omni.call("landmark" if tip and len(proposals) == 1 else "explain",
+                                  say_prompt(facts, knowledge=know))
             rec["llm"].append(call)
             rec["explanation"] = call["text"] if call["ok"] else None
             if not call["ok"]:
                 rec["errors"].append("explanation failed: %s" % "; ".join(call["errors"])[:300])
+            self.maybe_speak(rec, rec["explanation"])
         rec["loop_ms"] = round((time.perf_counter() - t0) * 1000, 1)
         self.write(rec)
         return rec
@@ -584,10 +816,11 @@ class Cairn:
     def intent(self, q):
         s = q.lower()
         T = self.trails
-        aliases = {"lake": "rodeo_lagoon", "lagoon": "rodeo_lagoon", "rodeo beach": "rodeo_beach",
-                   "tennessee beach": "tennessee_beach", "muir": "muir_beach", "pirate": "pirates_cove",
-                   "visitor": "visitor_center", "ranger": "visitor_center", "stable": "miwok_stables",
-                   "car": "tv_th", "parking": "tv_th", "trailhead": "tv_th", "tennessee valley": "tv_th"}
+        aliases = {"cathedral": "cathedral_grove", "camp": "camp_eastwood", "eastwood": "camp_eastwood",
+                   "pantoll": "pantoll", "ranger": "pantoll", "bohemian": "bohemian_grove",
+                   "founders": "founders_grove", "visitor": "mw_entrance", "entrance": "mw_entrance",
+                   "car": "mw_entrance", "parking": "mw_entrance", "trailhead": "mw_entrance",
+                   "van wyck": "van_wyck", "meadow": "van_wyck", "highway": "panoramic_hwy"}
         for nid, n in T.nodes.items():
             aliases.setdefault(n["name"].lower(), nid)
         # every place named, in the order spoken (longest alias wins on overlap)
@@ -685,13 +918,16 @@ class Cairn:
                 facts["active_alerts"] = sorted(self.active)
                 facts["area"] = T.config["area"]
             rec["facts"] = facts
-        call = self.omni.call("answer", say_prompt(facts, text, list(self.turns)))
+        know = self.knowledge_for(rec, text or "", self.trails.name(self.target()), facts.get("you_are_near", ""),
+                                  (rec.get("intent") or {}).get("target") or "")
+        call = self.omni.call("answer", say_prompt(facts, text, list(self.turns), know))
         rec["llm"].append(call)
         rec["answer"] = call["text"] if call["ok"] else None
         if not call["ok"]:
             rec["errors"].append("answer failed: %s" % "; ".join(call["errors"])[:300])
         with self.lock:
             self.turns.append({"q": text or "", "a": rec["answer"] or ""})
+        self.maybe_speak(rec, rec["answer"])
         rec["loop_ms"] = round((time.perf_counter() - t0) * 1000, 1)
         self.write(rec)
         return rec
@@ -718,6 +954,9 @@ def cmd_replay(args):
         if d.get("new_junction"):
             tag.append("JUNCTION " + d["new_junction"])
             counts["junction"] += 1
+        if d.get("approaching_landmark"):
+            tag.append("LANDMARK " + d["approaching_landmark"])
+            counts["landmark"] += 1
         for c in rec.get("llm", []):
             counts["llm_ok" if c["ok"] else "llm_error"] += 1
         if rec.get("errors"):
@@ -741,8 +980,8 @@ def cmd_serve(args):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     agent = Cairn(args)
-    rec_dir = os.path.join(HERE, "recordings")
-    os.makedirs(rec_dir, exist_ok=True)
+    import re
+    rec_dir = agent.rec_dir
     with open(os.path.join(HERE, "ui.html"), "rb") as f:
         page = f.read()
 
@@ -760,7 +999,7 @@ def cmd_serve(args):
                 "active": sorted(agent.active), "busy": agent.omni.busy, "mock": args.mock_llm,
                 "target": agent.target(), "itinerary": agent.itinerary_view(),
                 "breadcrumbs": [[b["lat"], b["lon"]] for b in agent.breadcrumbs[-800:]],
-                "turns": list(agent.turns)}
+                "turns": list(agent.turns), "speak": agent.speak_enabled}
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
@@ -790,6 +1029,15 @@ def cmd_serve(args):
                 return self.send(200, graph())
             if path == "/api/state":
                 return self.send(200, state())
+            if path.startswith("/api/audio/"):
+                name = path[len("/api/audio/"):]
+                if not re.fullmatch(r"reply-[0-9a-f]{32}\.wav", name):
+                    return self.send(404, {"error": "not found"})
+                try:
+                    with open(os.path.join(rec_dir, name), "rb") as f:
+                        return self.send(200, f.read(), "audio/wav")
+                except OSError:
+                    return self.send(404, {"error": "not found"})
             if path == "/api/log":
                 since = 0
                 for kv in query.split("&"):
@@ -829,6 +1077,9 @@ def cmd_serve(args):
                         return self.send(400, {"error": "unknown destination"})
                     agent.destination = data["id"]
                     return self.send(200, state())
+                if self.path == "/api/speak":
+                    agent.speak_enabled = bool(data.get("on"))
+                    return self.send(200, state())
                 if self.path == "/api/reset":
                     agent.reset()
                     return self.send(200, state())
@@ -860,13 +1111,18 @@ def main():
     common.add_argument("--still-s", type=int, default=600, help="no-movement window in seconds")
     common.add_argument("--still-m", type=float, default=15.0, help="no-movement: moved less than this in the window")
     common.add_argument("--junction-m", type=float, default=60.0, help="radius that counts as 'at a junction'")
+    common.add_argument("--landmark-m", type=float, default=150.0,
+                        help="proactive tip when an untold landmark ahead or on the route is within this distance")
     common.add_argument("--log", default=os.path.join(HERE, "cairn_log.jsonl"), help="flushed JSONL log")
     sub = ap.add_subparsers(dest="cmd")
     r = sub.add_parser("replay", parents=[common], help="headless always-on run over data/track.json")
     r.add_argument("--iterations", type=int, default=0, help="0 = whole track")
     r.add_argument("--interval", type=float, default=0.0, help="seconds to sleep between points")
+    r.add_argument("--speak", action="store_true", help="speak explanations on the board speaker (TTS + aplay)")
     s = sub.add_parser("serve", parents=[common], help="web UI on 127.0.0.1")
     s.add_argument("--port", type=int, default=8080)
+    s.add_argument("--no-speak", dest="speak", action="store_false",
+                   help="do not speak answers on the board speaker (default: speak; toggle in the UI)")
     args = ap.parse_args()
     if args.cmd == "replay":
         return cmd_replay(args)

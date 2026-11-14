@@ -32,6 +32,10 @@ pre { white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.45 ui-m
 #answer { font-size:16px; line-height:1.5; min-height:48px; }
 #steps { max-height:320px; overflow:auto; font:12px/1.45 ui-monospace, Menlo, monospace; }
 #steps div { padding:3px 0; border-bottom:1px dashed var(--line); }
+.lm { color:var(--dest); font-weight:600; }
+#toast { position:absolute; left:12px; right:12px; bottom:12px; padding:8px 12px; border-radius:8px; background:var(--dest); color:#fff; font-size:13px; opacity:0; transition:opacity .4s; pointer-events:none; }
+#toast.show { opacity:.95; }
+.mapwrap { position:relative; }
 .al { color:var(--alert); font-weight:600; } .jn { color:var(--accent); font-weight:600; } .er { color:var(--alert); }
 .legend { font-size:11px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; margin-top:4px; }
 .spin { display:inline-block; width:10px; height:10px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:s 0.8s linear infinite; vertical-align:-1px; }
@@ -48,7 +52,7 @@ pre { white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.45 ui-m
 <main>
   <section class="card">
     <h2>Map · click to spoof GPS</h2>
-    <svg id="map" viewBox="0 0 1000 800" role="img" aria-label="Trail map"></svg>
+    <div class="mapwrap"><svg id="map" viewBox="0 0 1000 800" role="img" aria-label="Trail map"></svg><div id="toast"></div></div>
     <div class="legend"><span style="color:var(--trail)">— trail</span><span style="color:var(--dest)">● destination</span>
       <span style="color:var(--water)">● water</span><span style="color:var(--bail)">● bail-out</span><span>○ junction</span>
       <span style="color:var(--alert)">● you</span></div>
@@ -61,8 +65,10 @@ pre { white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.45 ui-m
     </div>
     <div class="controls">
       <button id="ptt">Hold to ask</button>
-      <input id="q" type="text" placeholder="or type: which way to the lake?">
+      <input id="q" type="text" placeholder="or type: which way to Cathedral Grove?">
       <button id="ask">Ask</button>
+      <label style="font-size:12px"><input type="checkbox" id="speak"> Speak answers</label>
+      <audio id="reply" controls preload="none" style="height:32px;max-width:100%"></audio>
     </div>
   </section>
   <section class="right">
@@ -143,6 +149,11 @@ function showItin(st) {
   if (st.destination && $('dest').value !== st.destination) $('dest').value = st.destination;
 }
 
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 7000);
+}
 function showRecord(r) {
   if (!r || r.done) return;
   const calls = r.llm || [];
@@ -152,6 +163,9 @@ function showRecord(r) {
       ` wall=${c.timings && c.timings.wall_s ? c.timings.wall_s.toFixed(1) + 's' : '-'}\n` +
       (c.device_evidence ? 'device: ' + c.device_evidence + '\n' : '') + (c.errors.length ? 'errors: ' + c.errors.join('; ') + '\n' : '') + (c.text || '')).join('\n\n');
   }
+  if (r.speech_url) $('reply').src = r.speech_url;
+  if (r.landmark_tip) toast('Nearby: ' + r.landmark_tip + (r.explanation ? ' — ' + r.explanation : ''));
+  if (r.knowledge && r.knowledge.length) $('output').textContent += '\n\nlocal knowledge used: ' + r.knowledge.join(', ');
   const say = r.answer || r.explanation;
   if (say) $('answer').textContent = say;
   else if (r.kind === 'ask' && r.errors.length) $('answer').textContent = 'Sorry: ' + r.errors.join('; ');
@@ -165,6 +179,10 @@ function stepLine(r) {
     s += ` ${(o.time_local || '').slice(11, 16)} ${o.source} (${o.lat}, ${o.lon}) active=[${(d.active || []).join(',')}]`;
     if ((d.new_alerts || []).length) { s += ` ALERT ${d.new_alerts.join(',')}`; cls = 'al'; }
     if (d.new_junction) { s += ` JUNCTION ${d.new_junction}`; cls = cls || 'jn'; }
+    if (d.approaching_landmark) { s += ` LANDMARK ${d.approaching_landmark}`; cls = cls || 'lm'; }
+  } else if (r.kind === 'speak') {
+    const a = (r.actions || [])[0], res = a ? a.result : {};
+    s += ` ${res.ok ? 'spoken ' + res.audio_s + 's audio, tts ' + res.tts_wall_s + 's, play started' : (res.errors || []).join('; ')}`;
   } else {
     s += ` q="${r.question || ''}" intent=${r.intent ? r.intent.kind : '-'}`; cls = 'jn';
   }
@@ -172,6 +190,7 @@ function stepLine(r) {
   if ((r.actions || []).length) s += ` actions=[${r.actions.map(a => a.name).join(',')}]`;
   if ((r.refused || []).length) s += ` refused=[${r.refused.map(a => a.name).join(',')}]`;
   (r.llm || []).forEach(c => s += ` llm:${c.purpose}=${c.ok ? 'ok' : 'ERR'}`);
+  if ((r.knowledge || []).length) s += ` knowledge=[${r.knowledge.join('; ')}]`;
   if ((r.errors || []).length) { s += ` errors=${r.errors.join('; ')}`; cls = 'er'; }
   if (r.loop_ms !== undefined) s += ` ${Math.round(r.loop_ms)}ms`;
   const div = document.createElement('div'); div.textContent = s; if (cls) div.className = cls;
@@ -182,7 +201,7 @@ async function poll() {
   try {
     const j = await api('/api/log?since=' + since);
     const box = $('steps');
-    j.records.forEach(r => { box.prepend(stepLine(r)); since = r.seq + 1; });
+    j.records.forEach(r => { box.prepend(stepLine(r)); since = r.seq + 1; if (r.kind === 'speak' && r.speech_url) $('reply').src = r.speech_url; });
     while (box.childNodes.length > 300) box.removeChild(box.lastChild);
     const st = j.state, s = $('status');
     drawCrumbs(st.breadcrumbs || []); showItin(st); if (st.position) setMe(st.position);
@@ -261,6 +280,8 @@ async function init() {
   const sel = $('dest');
   G.destinations.forEach(d => { const o = document.createElement('option'); o.value = d.id; o.textContent = d.name; sel.appendChild(o); });
   sel.value = st.destination;
+  $('speak').checked = !!st.speak;
+  $('speak').onchange = () => api('/api/speak', { on: $('speak').checked });
   if (st.position) setMe(st.position);
   sel.onchange = () => api('/api/destination', { id: sel.value });
   $('step').onclick = step;

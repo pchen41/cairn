@@ -1,46 +1,424 @@
 {
-  "_note": "Simplified Marin Headlands trail graph for the Cairn demo. Coordinates are approximate and hand-placed; do not use for real navigation.",
+  "_note": "Simplified Muir Woods / Mount Tamalpais trail graph for the Cairn demo. Coordinates are approximate and hand-placed; do not use for real navigation.",
   "config": {
-    "area": "Marin Headlands, CA",
+    "area": "Muir Woods National Monument, CA",
     "sunset_local": "16:58",
     "utc_offset": "-08:00",
-    "home_trailhead": "tv_th",
-    "default_destination": "rodeo_lagoon"
+    "home_trailhead": "mw_entrance",
+    "default_destination": "pantoll"
   },
   "nodes": [
-    {"id": "tv_th", "name": "Tennessee Valley Trailhead", "kinds": ["trailhead", "bailout", "water"], "lat": 37.8606, "lon": -122.5359},
-    {"id": "marincello_th", "name": "Marincello Trailhead", "kinds": ["trailhead", "bailout"], "lat": 37.8640, "lon": -122.5318},
-    {"id": "old_springs_jct", "name": "Old Springs Junction", "kinds": ["junction"], "lat": 37.8584, "lon": -122.5350},
-    {"id": "fox_jct", "name": "Fox Trail Junction", "kinds": ["junction"], "lat": 37.8505, "lon": -122.5372},
-    {"id": "tv_coastal_jct", "name": "Coastal Trail Junction", "kinds": ["junction"], "lat": 37.8378, "lon": -122.5385},
-    {"id": "fox_top", "name": "Fox and Coastal Ridge Junction", "kinds": ["junction"], "lat": 37.8440, "lon": -122.5320},
-    {"id": "miwok_stables", "name": "Miwok Stables water tap", "kinds": ["water", "junction"], "lat": 37.8553, "lon": -122.5243},
-    {"id": "miwok_wolf_jct", "name": "Miwok and Wolf Ridge Junction", "kinds": ["junction"], "lat": 37.8418, "lon": -122.5262},
-    {"id": "wolf_coastal_jct", "name": "Hill 88 Saddle", "kinds": ["junction"], "lat": 37.8360, "lon": -122.5320},
-    {"id": "tennessee_beach", "name": "Tennessee Beach", "kinds": ["destination"], "lat": 37.8318, "lon": -122.5392},
-    {"id": "pirates_cove", "name": "Pirates Cove", "kinds": ["destination"], "lat": 37.8418, "lon": -122.5489},
-    {"id": "muir_beach", "name": "Muir Beach", "kinds": ["destination", "bailout", "trailhead"], "lat": 37.8603, "lon": -122.5753},
-    {"id": "rodeo_lagoon", "name": "Rodeo Lagoon", "kinds": ["destination", "junction"], "lat": 37.8318, "lon": -122.5262},
-    {"id": "rodeo_beach", "name": "Rodeo Beach", "kinds": ["destination", "bailout"], "lat": 37.8308, "lon": -122.5385},
-    {"id": "visitor_center", "name": "Marin Headlands Visitor Center", "kinds": ["destination", "bailout", "water"], "lat": 37.8316, "lon": -122.5233}
+    {
+      "id": "mw_entrance",
+      "name": "Muir Woods Entrance and Visitor Center",
+      "kinds": [
+        "trailhead",
+        "bailout",
+        "water"
+      ],
+      "lat": 37.8935,
+      "lon": -122.5717
+    },
+    {
+      "id": "dipsea_jct",
+      "name": "Dipsea Trail Junction",
+      "kinds": [
+        "junction",
+        "landmark"
+      ],
+      "lat": 37.8921,
+      "lon": -122.5745,
+      "landmark": {
+        "story": [
+          "Dipsea Race"
+        ],
+        "blurb": "Where the Dipsea Trail crosses Redwood Creek"
+      }
+    },
+    {
+      "id": "bridge1",
+      "name": "Bridge 1",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.8946,
+      "lon": -122.5731
+    },
+    {
+      "id": "founders_grove",
+      "name": "Founders Grove",
+      "kinds": [
+        "junction",
+        "landmark"
+      ],
+      "lat": 37.8951,
+      "lon": -122.5742,
+      "landmark": {
+        "story": [
+          "William Kent (American politician)",
+          "Sequoia sempervirens"
+        ],
+        "blurb": "Grove dedicated to the people who saved Muir Woods"
+      }
+    },
+    {
+      "id": "bridge2",
+      "name": "Bridge 2",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.8958,
+      "lon": -122.5753
+    },
+    {
+      "id": "bohemian_grove",
+      "name": "Bohemian Grove",
+      "kinds": [
+        "junction",
+        "landmark"
+      ],
+      "lat": 37.8966,
+      "lon": -122.5765,
+      "landmark": {
+        "story": [
+          "Sequoia sempervirens"
+        ],
+        "blurb": "Some of the tallest redwoods in the monument"
+      }
+    },
+    {
+      "id": "cathedral_grove",
+      "name": "Cathedral Grove",
+      "kinds": [
+        "destination",
+        "junction",
+        "landmark"
+      ],
+      "lat": 37.8984,
+      "lon": -122.5789,
+      "landmark": {
+        "story": [
+          "Muir Woods National Monument",
+          "Sequoia sempervirens"
+        ],
+        "blurb": "Quiet zone among old-growth redwoods"
+      }
+    },
+    {
+      "id": "bridge3",
+      "name": "Bridge 3",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.8993,
+      "lon": -122.5801
+    },
+    {
+      "id": "bridge4",
+      "name": "Bridge 4",
+      "kinds": [
+        "junction",
+        "landmark"
+      ],
+      "lat": 37.9004,
+      "lon": -122.5817,
+      "landmark": {
+        "story": [
+          "Redwood Creek (Marin County)"
+        ],
+        "blurb": "Redwood Creek, where coho salmon spawn in winter"
+      }
+    },
+    {
+      "id": "fern_creek_jct",
+      "name": "Fern Creek Trail Junction",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.9013,
+      "lon": -122.581
+    },
+    {
+      "id": "lost_trail_jct",
+      "name": "Canopy View (Lost Trail) Junction",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.8995,
+      "lon": -122.5742
+    },
+    {
+      "id": "panoramic_hwy",
+      "name": "Panoramic Highway",
+      "kinds": [
+        "bailout",
+        "trailhead"
+      ],
+      "lat": 37.9016,
+      "lon": -122.5716
+    },
+    {
+      "id": "camp_eastwood",
+      "name": "Camp Alice Eastwood",
+      "kinds": [
+        "destination",
+        "water",
+        "bailout",
+        "landmark"
+      ],
+      "lat": 37.9052,
+      "lon": -122.5796,
+      "landmark": {
+        "story": [
+          "Mount Tamalpais"
+        ],
+        "blurb": "Old Mount Tamalpais railway camp site"
+      }
+    },
+    {
+      "id": "bootjack_jct",
+      "name": "Bootjack Trail Junction",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.9022,
+      "lon": -122.5838
+    },
+    {
+      "id": "ben_johnson_jct",
+      "name": "Ben Johnson and Stapelveldt Junction",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.9003,
+      "lon": -122.5935
+    },
+    {
+      "id": "van_wyck",
+      "name": "Van Wyck Meadow",
+      "kinds": [
+        "junction"
+      ],
+      "lat": 37.9088,
+      "lon": -122.593
+    },
+    {
+      "id": "pantoll",
+      "name": "Pantoll Ranger Station",
+      "kinds": [
+        "destination",
+        "bailout",
+        "water",
+        "landmark"
+      ],
+      "lat": 37.9038,
+      "lon": -122.6043,
+      "landmark": {
+        "story": [
+          "Mount Tamalpais State Park",
+          "Mount Tamalpais"
+        ],
+        "blurb": "Ranger station on the flank of Mount Tamalpais"
+      }
+    }
   ],
   "edges": [
-    {"from": "tv_th", "to": "old_springs_jct", "trail": "Tennessee Valley Trail", "points": []},
-    {"from": "tv_th", "to": "marincello_th", "trail": "Marincello Trail", "points": [[37.8622, -122.5340]]},
-    {"from": "old_springs_jct", "to": "fox_jct", "trail": "Tennessee Valley Trail", "points": [[37.8548, -122.5362]]},
-    {"from": "fox_jct", "to": "tv_coastal_jct", "trail": "Tennessee Valley Trail", "points": [[37.8452, -122.5381], [37.8410, -122.5379]]},
-    {"from": "tv_coastal_jct", "to": "tennessee_beach", "trail": "Tennessee Valley Trail", "points": [[37.8350, -122.5394]]},
-    {"from": "tv_coastal_jct", "to": "pirates_cove", "trail": "Coastal Trail", "points": [[37.8392, -122.5430], [37.8412, -122.5462]]},
-    {"from": "pirates_cove", "to": "muir_beach", "trail": "Coastal Trail", "points": [[37.8480, -122.5560], [37.8545, -122.5680]]},
-    {"from": "old_springs_jct", "to": "miwok_stables", "trail": "Old Springs Trail", "points": [[37.8575, -122.5310], [37.8562, -122.5275]]},
-    {"from": "miwok_stables", "to": "miwok_wolf_jct", "trail": "Miwok Trail", "points": [[37.8510, -122.5250], [37.8465, -122.5258]]},
-    {"from": "miwok_wolf_jct", "to": "rodeo_lagoon", "trail": "Miwok Trail", "points": [[37.8380, -122.5250], [37.8345, -122.5255]]},
-    {"from": "miwok_wolf_jct", "to": "wolf_coastal_jct", "trail": "Wolf Ridge Trail", "points": [[37.8398, -122.5295]]},
-    {"from": "fox_jct", "to": "fox_top", "trail": "Fox Trail", "points": [[37.8480, -122.5345]]},
-    {"from": "tv_coastal_jct", "to": "fox_top", "trail": "Coastal Trail", "points": [[37.8405, -122.5350]]},
-    {"from": "fox_top", "to": "wolf_coastal_jct", "trail": "Coastal Trail", "points": [[37.8400, -122.5322]]},
-    {"from": "wolf_coastal_jct", "to": "rodeo_beach", "trail": "Coastal Trail", "points": [[37.8335, -122.5350]]},
-    {"from": "rodeo_beach", "to": "rodeo_lagoon", "trail": "Lagoon Trail", "points": [[37.8312, -122.5330]]},
-    {"from": "rodeo_lagoon", "to": "visitor_center", "trail": "Lagoon Trail", "points": []}
+    {
+      "from": "mw_entrance",
+      "to": "bridge1",
+      "trail": "Main Trail",
+      "points": [
+        [
+          37.894,
+          -122.5724
+        ]
+      ]
+    },
+    {
+      "from": "bridge1",
+      "to": "founders_grove",
+      "trail": "Main Trail",
+      "points": []
+    },
+    {
+      "from": "founders_grove",
+      "to": "bridge2",
+      "trail": "Main Trail",
+      "points": []
+    },
+    {
+      "from": "bridge2",
+      "to": "bohemian_grove",
+      "trail": "Main Trail",
+      "points": []
+    },
+    {
+      "from": "bohemian_grove",
+      "to": "cathedral_grove",
+      "trail": "Main Trail",
+      "points": [
+        [
+          37.8975,
+          -122.5779
+        ]
+      ]
+    },
+    {
+      "from": "cathedral_grove",
+      "to": "bridge3",
+      "trail": "Main Trail",
+      "points": []
+    },
+    {
+      "from": "bridge3",
+      "to": "bridge4",
+      "trail": "Main Trail",
+      "points": [
+        [
+          37.8999,
+          -122.581
+        ]
+      ]
+    },
+    {
+      "from": "bridge2",
+      "to": "bridge4",
+      "trail": "Hillside Trail",
+      "points": [
+        [
+          37.8962,
+          -122.579
+        ],
+        [
+          37.8985,
+          -122.5815
+        ]
+      ]
+    },
+    {
+      "from": "bridge4",
+      "to": "fern_creek_jct",
+      "trail": "Fern Creek Trail",
+      "points": []
+    },
+    {
+      "from": "fern_creek_jct",
+      "to": "camp_eastwood",
+      "trail": "Fern Creek Trail",
+      "points": [
+        [
+          37.903,
+          -122.5805
+        ]
+      ]
+    },
+    {
+      "from": "bridge2",
+      "to": "lost_trail_jct",
+      "trail": "Ocean View Trail",
+      "points": [
+        [
+          37.8972,
+          -122.5745
+        ]
+      ]
+    },
+    {
+      "from": "lost_trail_jct",
+      "to": "panoramic_hwy",
+      "trail": "Ocean View Trail",
+      "points": [
+        [
+          37.9006,
+          -122.5728
+        ]
+      ]
+    },
+    {
+      "from": "lost_trail_jct",
+      "to": "fern_creek_jct",
+      "trail": "Lost Trail",
+      "points": [
+        [
+          37.9008,
+          -122.5775
+        ]
+      ]
+    },
+    {
+      "from": "bridge4",
+      "to": "bootjack_jct",
+      "trail": "Bootjack Trail",
+      "points": []
+    },
+    {
+      "from": "bootjack_jct",
+      "to": "van_wyck",
+      "trail": "Bootjack Trail",
+      "points": [
+        [
+          37.905,
+          -122.5875
+        ]
+      ]
+    },
+    {
+      "from": "van_wyck",
+      "to": "pantoll",
+      "trail": "TCC Trail",
+      "points": [
+        [
+          37.907,
+          -122.599
+        ]
+      ]
+    },
+    {
+      "from": "bridge4",
+      "to": "ben_johnson_jct",
+      "trail": "Ben Johnson Trail",
+      "points": [
+        [
+          37.9,
+          -122.586
+        ],
+        [
+          37.8995,
+          -122.59
+        ]
+      ]
+    },
+    {
+      "from": "ben_johnson_jct",
+      "to": "pantoll",
+      "trail": "Stapelveldt Trail",
+      "points": [
+        [
+          37.9018,
+          -122.5985
+        ]
+      ]
+    },
+    {
+      "from": "mw_entrance",
+      "to": "dipsea_jct",
+      "trail": "Dipsea Trail",
+      "points": []
+    },
+    {
+      "from": "dipsea_jct",
+      "to": "ben_johnson_jct",
+      "trail": "Dipsea Trail",
+      "points": [
+        [
+          37.8945,
+          -122.583
+        ],
+        [
+          37.8975,
+          -122.5895
+        ]
+      ]
+    }
   ]
 }

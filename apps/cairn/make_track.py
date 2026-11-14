@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Regenerate data/track.json: a synthetic hike from Tennessee Valley Trailhead to Rodeo Lagoon.
+"""Regenerate data/track.json: a synthetic hike from the Muir Woods entrance to Pantoll Ranger Station.
 
-Old Springs Trail -> off-route wander -> long water stop at Miwok Stables -> Miwok Trail -> slow last leg.
+Main Trail -> long stop at Cathedral Grove -> Ben Johnson Trail with an off-route wander -> slow last climb.
 One point per minute. Deterministic (fixed seed). Standard library only.
 """
 import json
@@ -17,8 +17,11 @@ from cairn import Trails, haversine  # noqa: E402
 
 rng = random.Random(7)
 T = Trails(os.path.join(HERE, "data", "trails.json"))
-legs = [("tv_th", "old_springs_jct", 1.25), ("old_springs_jct", "miwok_stables", 1.2),
-        ("miwok_stables", "miwok_wolf_jct", 1.2), ("miwok_wolf_jct", "rodeo_lagoon", 0.45)]
+path = ["mw_entrance", "bridge1", "founders_grove", "bridge2", "bohemian_grove", "cathedral_grove",
+        "bridge3", "bridge4", "ben_johnson_jct", "pantoll"]
+speed = {"bridge4": 0.9, "ben_johnson_jct": 0.45}  # speed on the leg that starts at this node
+legs = [(a, b, speed.get(a, 1.1)) for a, b in zip(path, path[1:])]
+WANDER_LEG, STOP_AT = "bridge4", "cathedral_grove"
 t = datetime.fromisoformat("2026-11-13T15:48:00-08:00")
 pts = []
 
@@ -51,7 +54,7 @@ def walk(line, speed, wander=None):
         if wander and wander[0] <= frac <= wander[1]:
             mid = (wander[0] + wander[1]) / 2
             off = wander[2] * (1 - abs(frac - mid) / (mid - wander[0]))
-            p = (p[0] - off / 111320.0, p[1])  # step south, off the trail
+            p = (p[0] + off / 111320.0, p[1])  # step north, off the trail
         jit = 2.0 / 111320.0
         add((p[0] + rng.uniform(-jit, jit), p[1] + rng.uniform(-jit, jit)))
         t += timedelta(seconds=60)
@@ -60,14 +63,14 @@ def walk(line, speed, wander=None):
 
 for a, b, speed in legs:
     line = line_for(a, b)
-    walk(line, speed, wander=(0.45, 0.8, 170.0) if a == "old_springs_jct" else None)
-    if b == "miwok_stables":
+    walk(line, speed, wander=(0.3, 0.75, 170.0) if a == WANDER_LEG else None)
+    if b == STOP_AT:
         p = line[-1]
         for _ in range(13):  # water and snack stop
             jit = 3.0 / 111320.0
             add((p[0] + rng.uniform(-jit, jit), p[1] + rng.uniform(-jit, jit)))
             t += timedelta(seconds=60)
-add(T.pos("rodeo_lagoon"))
+add(T.pos(path[-1]))
 
 with open(os.path.join(HERE, "data", "track.json"), "w") as f:
     json.dump(pts, f, indent=0)
