@@ -2,6 +2,8 @@
 
 Cairn is a prototype of a phone app: an always-on trail companion for Muir Woods that runs entirely on a Qualcomm Dragonwing IQ-9075. It watches your position against a local trail map and warns you when you go off-route, are too slow to get back before sunset, or have stopped moving for too long. At a junction you can hold a button and ask "which way to Cathedral Grove?". It tells you which trail to take, in two or three plain sentences, and can read the answer aloud on the board's speakers.
 
+![Cairn running on the IQ-9075: trail map, hold-to-talk, sample photos, and a banana slug identified on the NPU](screenshot.jpg)
+
 ## Why not a cloud API call?
 
 There is no signal in the backcountry, which is exactly where a hiker needs directions. An always-on watcher that is meant to keep you safe cannot depend on a connection, so the model, the map and every decision live on the board.
