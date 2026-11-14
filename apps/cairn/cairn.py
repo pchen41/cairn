@@ -478,7 +478,7 @@ def say_prompt(facts, question=None, turns=None, knowledge=None):
     ask = "The hiker asked: \"%s\". " % question.strip().replace('"', "'") if question else ""
     earlier = ""
     if turns:  # last 2 turns, trimmed, so phrasing stays consistent; route maths stays in code
-        earlier = 'Just before this, the hiker asked: "%s". ' % turns[-1]["q"][:80].replace('"', "'")
+        earlier = ""  # past turns made the 2B model repeat itself; itinerary and breadcrumbs are kept in code
     know = ""
     if knowledge:
         know = "Local knowledge: " + " ".join("%s: %s" % (k["title"], k["text"]) for k in knowledge) + " "
