@@ -354,7 +354,7 @@ def speak_wav(omni, text, out_wav, play=True):
     tag = uuid.uuid4().hex
     cmd = [os.path.join(sdk, "bin", "zetic_lfm3_cli"), "chat", "--model", model, "--target", "v73",
            "--lib-dir", os.path.join(sdk, "lib"), "--ctx", "2048", "--temp", "0", "--max-tokens", "60",
-           "--tts", "--out", out_wav, "[request:%s] %s" % (tag, text.strip())]
+           "--tts", "--out", out_wav, text.strip().lstrip("-").strip()]  # no request tag: TTS would read it aloud
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = os.path.join(sdk, "lib") + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
     with omni.lock:
