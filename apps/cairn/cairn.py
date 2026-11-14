@@ -505,8 +505,8 @@ SAY = ("You are Cairn, a hiking buddy who knows Muir Woods and Mount Tamalpais r
        "the hiker. Navigation facts (computed by code, correct): {facts}. {knowledge}{earlier}{ask}"
        "Answer only the current question, out loud, the way a friend would talk: casual, warm, contractions, "
        "\"you\", one or two short sentences. Mention only the next turn or the next place or two, not every "
-       "waypoint, and round distances the way people say them (\"about 800 metres\"). Every distance, direction "
-       "and time must come from the facts; never invent one. For general questions, share something from the "
+       "waypoint, and round the distance from the facts the way people say it. Every distance, direction "
+       "and time must come from the facts; never invent or change one. For general questions, share something from the "
        "local knowledge like a friend would. No lists, no markdown.")
 
 
@@ -1178,6 +1178,15 @@ def cmd_serve(args):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     agent = Cairn(args)
+
+    def _warm():  # load the resident text model now so the first question is fast too
+        with agent.omni.lock:
+            try:
+                if agent.omni.resident is not None and agent.omni.resident.p is None:
+                    agent.omni.resident.start()
+            except Exception as e:  # noqa: BLE001  (a failed warm-up just means the first call loads it)
+                print("resident warm-up failed: %s" % e, flush=True)
+    threading.Thread(target=_warm, daemon=True).start()
     import re
     rec_dir = agent.rec_dir
     with open(os.path.join(HERE, "ui.html"), "rb") as f:
