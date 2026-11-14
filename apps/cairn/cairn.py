@@ -276,6 +276,117 @@ class Trails:
 
 # ---------------------------------------------------------------- model calls (ZETIC Omni, or mock)
 
+class Resident:
+    """Keeps one `zetic_lfm3_cli chat -i` process loaded for text-only calls, so each answer skips the ~3.8 s model
+    reload. Sends /reset before every request (no history carries over), caps tokens at process start, checks
+    usage, natural stop and non-empty text, and keeps the process's Hexagon load line as device evidence.
+    Any failure kills the process; the caller's retry starts a fresh one. Errors are returned as data."""
+    STATS = re.compile(r"\[(\w+)\] finish (\w+) \| prompt (\d+) rows \(cached (\d+)\) -> (\d+) tokens")
+    ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+    def __init__(self, sdk, model, max_tokens):
+        self.sdk, self.model, self.max_tokens = sdk, model, max_tokens
+        self.p, self.q, self.evidence, self.load_ms = None, None, None, None
+
+    def _reader(self, p, q):
+        for line in p.stdout:
+            q.put(line)
+        q.put(None)
+
+    def _get(self, deadline):
+        import queue
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("resident model timed out")
+        try:
+            line = self.q.get(timeout=left)
+        except queue.Empty:
+            raise TimeoutError("resident model timed out")
+        if line is None:
+            raise RuntimeError("resident model process exited")
+        return self.ANSI.sub("", line.rstrip("\n"))
+
+    def start(self, timeout=90):
+        import queue
+        self.stop()
+        env = dict(os.environ)
+        env["LD_LIBRARY_PATH"] = os.path.join(self.sdk, "lib") + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+        cmd = [os.path.join(self.sdk, "bin", "zetic_lfm3_cli"), "chat", "-i", "--model", self.model, "--target", "v73",
+               "--lib-dir", os.path.join(self.sdk, "lib"), "--ctx", "2048", "--temp", "0",
+               "--max-tokens", str(self.max_tokens), "--verbose"]
+        self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  text=True, bufsize=1, cwd=self.sdk, env=env)
+        self.q = queue.Queue()
+        threading.Thread(target=self._reader, args=(self.p, self.q), daemon=True).start()
+        deadline, dev, loaded = time.monotonic() + timeout, None, False
+        while True:
+            line = self._get(deadline)
+            if "hexrt open" in line and "v73" in line and re.search(r"\bnsp2=1\b", line):
+                dev = line
+            if "loaded lfm3-omni-2b v73" in line:
+                loaded = True
+            m = re.search(r"\| load ([\d.]+) ms", line)
+            if m:
+                self.load_ms = float(m.group(1))
+                break
+        if not (dev and loaded):
+            self.stop()
+            raise RuntimeError("resident model started without Hexagon v73/two-NSP evidence")
+        self.evidence = dev
+
+    def stop(self):
+        if self.p is not None:
+            try:
+                self.p.kill()
+            except OSError:
+                pass
+        self.p = None
+
+    def generate(self, prompt, max_tokens, timeout=60):
+        t0 = time.perf_counter()
+        r = {"ok": False, "text": "", "completion_tokens": None, "finish_reason": None, "errors": [],
+             "timings": {"model_load_ms": 0.0}, "device_evidence": None}
+        try:
+            if max_tokens > self.max_tokens:
+                raise ValueError("max_tokens above the resident process cap")
+            if self.p is None or self.p.poll() is not None:
+                self.start()
+                r["timings"]["model_load_ms"] = self.load_ms
+            clean = " ".join(prompt.split()).lstrip("/-")
+            self.p.stdin.write("/reset\n[request:%s] %s\n" % (uuid.uuid4().hex, clean))
+            self.p.stdin.flush()
+            deadline, lines = time.monotonic() + timeout, []
+            while True:
+                line = self._get(deadline)
+                m = self.STATS.search(line)
+                if m:
+                    break
+                lines.append(line)
+            status, finish, rows, cached, tokens = m.groups()
+            text = "\n".join(l[2:] if l.startswith("> ") else ("" if l.strip() == ">" else l) for l in lines)
+            text = re.sub(r"<think>.*?(?:</think>|$)", "", text, flags=re.S | re.I).strip()
+            r.update(text=text, completion_tokens=int(tokens), finish_reason=finish.lower())
+            t = re.search(r"ttft ([\d.]+) ms", line)
+            d = re.search(r"decode \d+ steps ([\d.]+) t/s", line)
+            r["timings"]["runtime_ttft_ms"] = float(t.group(1)) if t else None
+            r["timings"]["runtime_decode_tok_s"] = float(d.group(1)) if d else None
+            if status.lower() != "ok":
+                r["errors"].append("generation status %s" % status)
+            if not 0 < int(tokens) <= max_tokens:
+                r["errors"].append("zero completion tokens or token cap exceeded")
+            if finish.lower() != "stop":
+                r["errors"].append("generation did not finish naturally: %s" % finish)
+            if not text:
+                r["errors"].append("empty or reasoning-only answer")
+            r["device_evidence"] = "%s [resident process, loaded once in %.0f ms]" % (self.evidence, self.load_ms or 0)
+        except (OSError, ValueError, RuntimeError, TimeoutError) as e:
+            r["errors"].append("%s: %s" % (type(e).__name__, e))
+            self.stop()
+        r["timings"]["wall_s"] = time.perf_counter() - t0
+        r["ok"] = not r["errors"]
+        return r
+
+
 class Omni:
     """One capped ZETIC CLI request per call through examples/zetic-lfm/run.py, retried once.
     run.py tags each prompt with a unique request id, enforces the token cap, rejects empty or
@@ -283,6 +394,7 @@ class Omni:
 
     def __init__(self, sdk, model, mock=False, timeout=180):
         self.sdk, self.model, self.mock, self.timeout = sdk, model, mock, timeout
+        self.resident = None if mock else Resident(sdk, model, EXPLAIN_MAX_TOKENS)
         self.lock = threading.Lock()
         self.busy = None
 
@@ -297,6 +409,8 @@ class Omni:
                 text = "(mock answer, no model ran) " + prompt[prompt.find("{"):][:160]
             return {"ok": True, "text": text, "completion_tokens": 12, "finish_reason": "stop", "errors": [],
                     "timings": {"wall_s": 0.05}, "device_evidence": "mock"}
+        if self.resident is not None and audio is None and image is None:
+            return self.resident.generate(prompt, max_tokens)
         if zetic_run is None:
             return {"ok": False, "text": "", "errors": ["run.py (ZETIC wrapper) not found next to cairn.py "
                                                          "or in examples/zetic-lfm"], "timings": {}}
