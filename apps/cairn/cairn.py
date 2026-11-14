@@ -44,6 +44,8 @@ ALLOWED_ACTIONS = ("log_alert", "nearest_bailout", "route_at_junction", "nearest
 VISION_PROMPT = ("This photo is from a hiker's camera on a forest trail. In one or two short sentences, say what "
                  "is in it: a plant, tree, animal, sign or trail feature. If you are not sure, say so.")
 VISION_MAX_TOKENS = 80
+VOICE_STYLE = ("Perform TTS in American English using a calm, warm, deep male voice, "
+               "speaking slowly and gently.")
 PPM_HEADER = b"P6\n512 512\n255\n"  # the SDK takes exactly 512x512 RGB; the browser sends binary PPM
 
 VOLUME = {"percent": 50}  # software gain applied to reply audio before playback (the board's stream mixer
@@ -354,7 +356,7 @@ def speak_wav(omni, text, out_wav, play=True):
     tag = uuid.uuid4().hex
     cmd = [os.path.join(sdk, "bin", "zetic_lfm3_cli"), "chat", "--model", model, "--target", "v73",
            "--lib-dir", os.path.join(sdk, "lib"), "--ctx", "2048", "--temp", "0", "--max-tokens", "60",
-           "--tts", "--out", out_wav, text.strip().lstrip("-").strip()]  # no request tag: TTS would read it aloud
+           "--system", VOICE_STYLE, "--tts", "--out", out_wav, text.strip().lstrip("-").strip()]  # no request tag: TTS would read it aloud
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = os.path.join(sdk, "lib") + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
     with omni.lock:
@@ -385,10 +387,13 @@ def speak_wav(omni, text, out_wav, play=True):
     return res
 
 
-SAY = ("You are Cairn, a friendly local hiking friend who knows Muir Woods and Mount Tamalpais well. Navigation facts "
-       "(computed by code, correct): {facts}. {knowledge}{earlier}{ask}Reply warmly in two or three short "
-       "sentences. Use the facts for every distance, direction and time; never invent one. If the question is "
-       "general, answer from the local knowledge. No lists, no markdown.")
+SAY = ("You are Cairn, a hiking buddy who knows Muir Woods and Mount Tamalpais really well, walking right next to "
+       "the hiker. Navigation facts (computed by code, correct): {facts}. {knowledge}{earlier}{ask}"
+       "Answer only the current question, out loud, the way a friend would talk: casual, warm, contractions, "
+       "\"you\", one or two short sentences. Mention only the next turn or the next place or two, not every "
+       "waypoint, and round distances the way people say them (\"about 800 metres\"). Every distance, direction "
+       "and time must come from the facts; never invent one. For general questions, share something from the "
+       "local knowledge like a friend would. No lists, no markdown.")
 
 
 PROMPT_DROP = {"remaining_m", "bearing_deg", "limit_m", "reason", "back_to_trail_bearing_deg", "window_s",
@@ -473,9 +478,7 @@ def say_prompt(facts, question=None, turns=None, knowledge=None):
     ask = "The hiker asked: \"%s\". " % question.strip().replace('"', "'") if question else ""
     earlier = ""
     if turns:  # last 2 turns, trimmed, so phrasing stays consistent; route maths stays in code
-        earlier = "Earlier: " + " ".join('Q "%s" A "%s".' % (t["q"][:80].replace('"', "'"),
-                                                               (t["a"] or "")[:120].replace('"', "'"))
-                                         for t in turns[-2:]) + " "
+        earlier = 'Just before this, the hiker asked: "%s". ' % turns[-1]["q"][:80].replace('"', "'")
     know = ""
     if knowledge:
         know = "Local knowledge: " + " ".join("%s: %s" % (k["title"], k["text"]) for k in knowledge) + " "
