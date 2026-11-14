@@ -46,22 +46,39 @@ VISION_PROMPT = ("This photo is from a hiker's camera on a forest trail. In one 
 VISION_MAX_TOKENS = 80
 PPM_HEADER = b"P6\n512 512\n255\n"  # the SDK takes exactly 512x512 RGB; the browser sends binary PPM
 
-VOLUME_CONTROL = "stream0.vol_ctrl0 MultiMedia1 Playback Volu"  # board playback stream used by aplay plughw:0,0
-VOLUME_MAX = 60  # percent; keeps a slip of the slider from blasting the speakers
+VOLUME = {"percent": 50}  # software gain applied to reply audio before playback (the board's stream mixer
+                          # control accepted values but did not change loudness on our EVK)
 
 
 def set_volume(percent, mock=False):
-    """Set the board's playback volume (0..VOLUME_MAX %) with amixer; returns the percent applied or None."""
-    pct = max(0, min(VOLUME_MAX, int(percent)))
-    if mock:
-        return pct
+    """Set the reply volume 0..100 %. Applied in software to the WAV samples before aplay. Returns the percent."""
+    VOLUME["percent"] = max(0, min(100, int(percent)))
+    return VOLUME["percent"]
+
+
+def scaled_copy(path):
+    """Write a copy of a 16-bit PCM WAV with the current volume applied; returns its path (or the input on error)."""
+    import array
+    import wave
+    gain = VOLUME["percent"] / 100.0
+    if gain >= 0.999:
+        return path
     try:
-        out = subprocess.run(["amixer", "-c", "0", "sset", VOLUME_CONTROL, "%d%%" % pct],
-                             capture_output=True, text=True, timeout=5)
-        m = re.search(r"\[(\d+)%\]", out.stdout)
-        return int(m.group(1)) if out.returncode == 0 and m else None
-    except (OSError, subprocess.SubprocessError):
-        return None
+        with wave.open(path, "rb") as w:
+            params = w.getparams()
+            frames = w.readframes(w.getnframes())
+        if params.sampwidth != 2:
+            return path
+        a = array.array("h", frames)
+        for k in range(len(a)):
+            a[k] = int(a[k] * gain)
+        out = path[:-4] + "-vol.wav"
+        with wave.open(out, "wb") as w:
+            w.setparams(params)
+            w.writeframes(a.tobytes())
+        return out
+    except (OSError, EOFError, wave.Error):
+        return path
 
 EARTH_R = 6371000.0
 COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
@@ -317,7 +334,7 @@ def play_wav(path):
         if old is not None and old.poll() is None:
             old.kill()
         try:
-            _PLAYER["proc"] = subprocess.Popen(["aplay", "-q", "-D", "plughw:0,0", path],
+            _PLAYER["proc"] = subprocess.Popen(["aplay", "-q", "-D", "plughw:0,0", scaled_copy(path)],
                                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return None
         except OSError as e:
@@ -1064,7 +1081,7 @@ def cmd_serve(args):
                 "target": agent.target(), "itinerary": agent.itinerary_view(),
                 "breadcrumbs": [[b["lat"], b["lon"]] for b in agent.breadcrumbs[-800:]],
                 "turns": list(agent.turns), "speak": agent.speak_enabled,
-                "volume": getattr(agent, "volume", None), "route": route_via()}
+                "volume": VOLUME["percent"], "route": route_via()}
 
     def route_via():
         """Node names on the route to the next stop, for the UI's route highlight (computed in code)."""
