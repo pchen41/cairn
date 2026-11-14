@@ -611,12 +611,15 @@ def say_prompt(facts, question=None, turns=None, knowledge=None, kind=None):
     q = question.strip().replace('"', "'") if question else ""
     know = " ".join(k["text"] for k in (knowledge or []))
     if kind == "general" and know:
-        return ("You are Cairn, a friendly hiking guide in Muir Woods. Answer the hiker in one or two short, "
-                "casual sentences using only this information: %s\nHiker: %s" % (know, q))
+        return ("You are a friendly hiking guide in Muir Woods. Answer the hiker in one short, casual "
+                "sentence (two at most) using only this information. Don't introduce yourself.\nInformation: %s\nHiker: %s"
+                % (know, q))
     lines = "\n".join("- " + l for l in fact_lines(facts))
     extra = ("\nGood to know: " + know) if know and not q else ""
-    head = ("You are Cairn, a friendly hiking guide. Tell the hiker this in one or two short, casual sentences. "
-            "Use the exact names, directions and distances below. Do not add other numbers.\n")
+    head = ("You are a friendly hiking guide talking to a hiker. These facts are about the hiker. Tell them in one short, casual "
+            "sentence (two at most), speaking to them as \"you\" (\"You're near...\"). Don't introduce "
+            "yourself or say \"I'm\". Use the exact names, directions and distances below. Do not add other "
+            "numbers.\n")
     return head + lines + extra + ("\nHiker: " + q if q else "")
 
 
@@ -1031,12 +1034,12 @@ class Cairn:
             if nid not in targets:
                 targets.append(nid)
         target = targets[0] if targets else None
-        if targets and any(w in s for w in (" first", "then", "after that", "afterwards", "want to go",
-                                            "plan", "stop at", "on the way")):
+        multi = len(targets) > 1 or any(w in s for w in (" first", "then", "after that", "afterwards",
+                                                          "stop at", "on the way"))
+        if targets and multi:
             if " first" in s:
-                rest = [n for n in self.itinerary if n not in targets and n not in self.reached]
-                cur = [] if self.destination in targets or self.destination in rest else [self.destination]
-                plan = targets + rest + cur
+                cur = [] if self.destination in targets else [self.destination]
+                plan = targets + cur
             elif ("then" in s or "after" in s) and self.itinerary:
                 plan = [n for n in self.itinerary if n not in self.reached] + \
                     [n for n in targets if n not in self.itinerary]
@@ -1085,13 +1088,16 @@ class Cairn:
             if kind == "plan":
                 self.itinerary = list(target)
                 self.reached -= set(target)
+                if target and "destination" in T.nodes[target[-1]]["kinds"]:
+                    self.destination = target[-1]
                 target = self.target()
             elif kind == "route" and target and target in T.nodes and "destination" in T.nodes[target]["kinds"] \
                     and target not in self.itinerary:
-                self.destination = target
+                self.destination = target  # naming one place sets the destination and replaces any plan
+                self.itinerary = []
             rec["intent"] = {"kind": kind, "target": T.name(target) if target else None,
                              "itinerary": [v["name"] for v in self.itinerary_view()]}
-            facts = {"you_are_near": T.name(T.nearest_node(p)), "on_trail": T.nearest_trail(p)[2]["trail"]}
+            facts = {"hiker_is_near": T.name(T.nearest_node(p)), "on_trail": T.nearest_trail(p)[2]["trail"]}
             if kind in ("route", "plan"):
                 rec["proposals"] = ["route_at_junction"]
                 r, f = self.route_facts(p, target)
@@ -1114,7 +1120,7 @@ class Cairn:
                 facts["active_alerts"] = sorted(self.active)
                 facts["area"] = T.config["area"]
             rec["facts"] = facts
-        know = self.knowledge_for(rec, text or "", self.trails.name(self.target()), facts.get("you_are_near", ""),
+        know = self.knowledge_for(rec, text or "", self.trails.name(self.target()), facts.get("hiker_is_near", ""),
                                   (rec.get("intent") or {}).get("target") or "")
         call = self.omni.call("answer", say_prompt(facts, text, list(self.turns), know, kind=kind))
         rec["llm"].append(call)
@@ -1148,9 +1154,9 @@ class Cairn:
             if p is None and self.track:
                 p = (self.track[0]["lat"], self.track[0]["lon"])
             T = self.trails
-            facts = {"you_are_near": T.name(T.nearest_node(p)), "camera_sees": seen}
+            facts = {"hiker_is_near": T.name(T.nearest_node(p)), "camera_sees": seen}
             rec["facts"] = facts
-        know = self.knowledge_for(rec, seen, facts["you_are_near"])
+        know = self.knowledge_for(rec, seen, facts["hiker_is_near"])
         call = self.omni.call("answer", say_prompt(facts, "What is this I'm looking at?", list(self.turns), know))
         rec["llm"].append(call)
         rec["answer"] = call["text"] if call["ok"] else None

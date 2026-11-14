@@ -240,6 +240,121 @@ pre { white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.5 ui-mo
   #answer { font-size:17px; }
   #vol { width:96px; }
 }
+
+/* ---- polish pass 2: focal answer, state transitions, native-feeling alerts, micro-interactions ---- */
+body { -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+.card { transition:border-color .25s, box-shadow .25s; }
+.card h2, .lbl { letter-spacing:.08em; }
+#status { transition:color .25s, border-color .25s, background-color .25s; }
+#status.thinking { background:var(--accent-soft); }
+#status.idle .dot { background:var(--accent); }
+#status.speaking { background:var(--dest-soft); }
+#status.listening, #status.lost { background:var(--alert-soft); }
+#sub { font-variant-numeric:tabular-nums; }
+
+/* buttons */
+.btn, #cam, .sample, .destsel, select, input[type=text] { transition:border-color .15s, background-color .15s, color .15s, transform .08s, box-shadow .15s, opacity .15s; }
+.btn:hover:not(:disabled) { background:color-mix(in srgb, var(--accent) 9%, var(--panel2)); }
+.btn.primary:hover:not(:disabled) { background:color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.btn:active:not(:disabled), #cam:active:not(:disabled), .sample:active:not(:disabled) { transform:scale(.96); }
+.group .btn:hover, .group .btn:focus-visible { position:relative; z-index:1; }
+input[type=text]:focus { border-color:var(--accent); outline:none; box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+input[type=text]::placeholder { color:var(--muted); opacity:.8; }
+.sample:hover:not(:disabled) { transform:translateY(-2px); box-shadow:var(--shadow); }
+.sample span { font-weight:600; }
+#samplelist { scrollbar-width:thin; }
+
+/* Cairn says: the focal card */
+.says { border-left-width:5px; padding:16px 18px 16px 16px; background:linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 55%, var(--panel)), var(--panel) 70%); transition:border-color .35s, box-shadow .35s, background-color .35s; }
+.says h2 { color:var(--accent); display:flex; align-items:center; gap:7px; margin-bottom:10px; transition:color .35s; }
+.says h2::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; flex:none; }
+.says:has(.skel) h2::before, .says.speaking h2::before { animation:blink 1s ease-in-out infinite; }
+.says.speaking { box-shadow:var(--shadow), 0 0 0 1px color-mix(in srgb, var(--dest) 35%, transparent); }
+.says.speaking h2 { color:var(--dest); }
+#asked { font-size:12.5px; margin-bottom:8px; padding-left:9px; border-left:2px solid var(--line); line-height:1.4; overflow:hidden; }
+#answer { font-size:22px; line-height:1.38; font-weight:500; letter-spacing:-.012em; text-wrap:pretty; min-height:44px; }
+#answer.empty { font-weight:400; font-size:15px; letter-spacing:0; line-height:1.5; }
+#answer.err { font-weight:500; font-size:15px; letter-spacing:0; }
+#answer.in { animation:rise .32s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes rise { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+.skel { animation:fadein .2s ease both; padding-top:2px; }
+.skel i { height:15px; }
+@keyframes fadein { from { opacity:0; } to { opacity:1; } }
+#speaking { margin-top:12px; padding:5px 11px 5px 9px; border-radius:999px; background:var(--dest-soft); width:fit-content; max-width:100%; }
+.says.speaking #speaking { display:inline-flex; animation:rise .3s ease both; }
+#replywrap.has { animation:fadein .4s ease both; padding-top:10px; border-top:1px solid var(--line); margin-top:14px; clear:both; }
+#shot { box-shadow:var(--shadow); }
+
+/* mic: idle / listening / busy must read at a glance */
+#ptt { transition:transform .12s, background-color .2s, box-shadow .2s, opacity .2s; }
+#ptt:hover:not(:disabled):not(.rec) { transform:scale(1.04); }
+#ptt:active:not(:disabled):not(.rec) { transform:scale(.95); }
+#ptt.rec { transform:scale(1.1); box-shadow:0 0 0 5px color-mix(in srgb, var(--me) 28%, transparent), 0 6px 22px color-mix(in srgb, var(--me) 60%, transparent); }
+#ptt.rec svg { animation:blink 1s ease-in-out infinite; }
+#ptt:disabled { transition-delay:.3s; }   /* no flicker while Replay steps tick past */
+#ptt.busy:disabled { opacity:1; background:var(--line); color:var(--muted); box-shadow:none; transition-delay:0s; }
+#ptt.busy:disabled::before { display:none; }
+#ptt.busy:disabled::after { inset:-4px; border:3px solid var(--accent); border-right-color:transparent; border-bottom-color:transparent; animation:spin .9s linear infinite; }
+#pttlabel { transition:color .2s; display:flex; align-items:center; gap:7px; font-variant-numeric:tabular-nums; }
+.pttinfo.rec #pttlabel { color:var(--alert); }
+.pttinfo.rec #pttlabel::before { content:""; width:9px; height:9px; border-radius:50%; background:var(--alert); animation:blink 1s ease-in-out infinite; flex:none; }
+.pttinfo.busy #pttlabel { color:var(--accent); }
+
+/* alert banners */
+.banner { align-items:center; padding:11px 14px 11px 11px; border-radius:14px; border-color:color-mix(in srgb, currentColor 45%, transparent); box-shadow:var(--shadow); animation:drop .38s cubic-bezier(.2,.8,.2,1) both; line-height:1.35; }
+.banner svg { width:32px; height:32px; padding:7px; border-radius:50%; background:color-mix(in srgb, currentColor 16%, transparent); margin-top:0; }
+.banner.red svg { animation:blink 1.4s ease-in-out 3; }
+.banner b { font-size:13.5px; letter-spacing:.01em; }
+@keyframes drop { from { opacity:0; transform:translateY(-10px) scale(.98); } to { opacity:1; transform:none; } }
+
+/* landmark toast */
+#toast { align-items:flex-start; gap:10px; padding:10px 14px 10px 10px; border-radius:14px; line-height:1.35; background:color-mix(in srgb, var(--dest) 94%, transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); transform:translateY(14px) scale(.98); transition:opacity .35s, transform .35s cubic-bezier(.2,.8,.2,1); }
+#toast.show { opacity:1; }
+#toast svg { width:26px; height:26px; padding:5px; border-radius:50%; background:rgba(255,255,255,.2); margin-top:0; }
+
+/* map */
+.mapwrap { border-radius:12px; box-shadow:inset 0 0 0 1px var(--line); }
+#map text { stroke-width:var(--halo, 4px); stroke-opacity:.92; }
+.n-label { font-weight:650; }
+.me-halo { fill:var(--me); opacity:.16; }
+.me-dot { filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.me-core { fill:#fff; opacity:.95; }
+#me.placed { transition:transform .45s cubic-bezier(.3,.7,.3,1); }
+.legend { margin-top:10px; gap:5px 12px; }
+
+/* itinerary + progress */
+.chip { transition:background-color .25s, border-color .25s, color .25s; }
+.chip.next { box-shadow:0 0 0 3px color-mix(in srgb, var(--dest) 14%, transparent); }
+.progress { height:6px; }
+.progress i { border-radius:4px; transition:width .5s ease; }
+.destsel { cursor:pointer; }
+
+/* timeline + hood */
+#timeline li { animation:fadein .35s ease both; }
+#timeline { scrollbar-width:thin; }
+.tl-s { line-height:1.4; }
+details.hood > summary { padding:2px 0; border-radius:6px; }
+details.hood > summary:hover { color:var(--ink); }
+pre, #steps { scrollbar-width:thin; }
+
+/* camera modal */
+#cammodal { animation:fadein .2s ease both; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
+.cambox { animation:rise .25s ease both; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+#shutter { transition:transform .08s; }
+#shutter:active:not(:disabled) { transform:scale(.93); }
+
+@media (max-width:900px) {
+  main { gap:12px; padding:12px; }
+  header { padding:10px 14px; gap:8px 12px; }
+  .talk { box-shadow:0 -8px 24px rgba(0,0,0,.12); }
+  #pttlabel { font-size:16px; }
+}
+@media (max-width:520px) {
+  #answer { font-size:19px; }
+  .says { padding:14px 14px 14px 13px; }
+  .legend { gap:4px 10px; }
+  .brand .tag { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+}
 @media (prefers-reduced-motion: reduce) { * { animation-duration:0s !important; transition:none !important; } }
 </style>
 </head>
@@ -249,11 +364,11 @@ pre { white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.5 ui-mo
     <svg class="logo" viewBox="0 0 34 34" aria-hidden="true"><ellipse cx="17" cy="27" rx="12" ry="5" fill="currentColor" opacity=".55"/><ellipse cx="17" cy="18" rx="8.5" ry="4.5" fill="currentColor" opacity=".8"/><ellipse cx="17" cy="10.5" rx="5.5" ry="3.5" fill="currentColor"/><ellipse cx="17" cy="4.6" rx="3" ry="2.2" fill="currentColor"/></svg>
     <div>
       <h1>Cairn</h1>
-      <div class="tag">Phone app prototype · offline voice trail guide for Muir Woods, running against on-device LFM3-Omni-2B (IQ-9075 NPU)</div>
+      <div class="tag">Phone app prototype · voice trail guide for Muir Woods that works with no internet, running on-device LFM3-Omni-2B (IQ-9075 NPU)</div>
     </div>
   </div>
   <div class="hright">
-    <span class="badge"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M6 1.5v2.5M10 1.5v2.5M6 12v2.5M10 12v2.5M1.5 6h2.5M1.5 10h2.5M12 6h2.5M12 10h2.5"/></svg>on-device · offline</span>
+    <span class="badge" title="The AI model runs on this device. Nothing is sent to the cloud, and no internet connection is needed."><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M6 1.5v2.5M10 1.5v2.5M6 12v2.5M10 12v2.5M1.5 6h2.5M1.5 10h2.5M12 6h2.5M12 10h2.5"/></svg>Runs on-device · no internet needed</span>
     <span class="badge mock" id="mock" hidden>mock LLM</span>
     <span id="status"><span class="dot"></span><span id="statustext">connecting…</span></span>
     <span id="sub"></span>
@@ -433,6 +548,7 @@ function drawMap() {
   const cw = svg.clientWidth || 700;
   const u = Math.max(1, Math.min(2.1, 640 / cw));   // scale strokes and labels up on small screens
   const fs = 13 * u, small = u > 1.5;
+  svg.style.setProperty('--halo', (3.6 * u).toFixed(1) + 'px');
   nodeByName = {}; edgeIdx = {}; nodeXY = {};
   G.nodes.forEach(n => { nodeByName[n.name] = n; nodeXY[n.name] = proj.xy(n.lat, n.lon); });
   const nearest = (p) => { let b = null, bd = 1e9; G.nodes.forEach(n => { const d = (n.lat - p[0]) ** 2 + (n.lon - p[1]) ** 2; if (d < bd) { bd = d; b = n; } }); return b.name; };
@@ -500,8 +616,10 @@ function drawMap() {
   }
   svg.appendChild(gm); svg.appendChild(gl);
   const me = el('g', { id: 'me', transform: 'translate(-99,-99)' });
+  me.appendChild(el('circle', { r: 19 * u, class: 'me-halo' }));
   me.appendChild(el('circle', { r: 10 * u, class: 'me-pulse' }));
-  me.appendChild(el('circle', { r: 8 * u, class: 'me-dot', 'stroke-width': 3 * u }));
+  me.appendChild(el('circle', { r: 8.5 * u, class: 'me-dot', 'stroke-width': 3 * u }));
+  me.appendChild(el('circle', { r: 2.6 * u, class: 'me-core' }));
   svg.appendChild(me);
   if (ST) { drawCrumbs(ST.breadcrumbs || []); if (ST.position) setMe(ST.position); drawRoute(ST); }
 }
@@ -510,7 +628,9 @@ let walked = [];
 function setMe(pos) {
   if (!pos) return;
   const [x, y] = proj.xy(pos[0], pos[1]);
-  $('me').setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+  const me = $('me'), was = me.dataset.on;
+  me.removeAttribute('transform'); me.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+  if (!was) { me.dataset.on = '1'; requestAnimationFrame(() => requestAnimationFrame(() => me.classList.add('placed'))); }   // glide between fixes, not from off-map
 }
 function drawCrumbs(b) {  // breadcrumb trail kept by the board, drawn faded
   $('walked').setAttribute('d', b.length ? pathOf(xyLine(b)) : '');
@@ -572,7 +692,7 @@ function toast(msg) {
   const t = $('toast'); t.innerHTML = IC.landmark + '<span></span>'; t.lastChild.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 7000);
 }
-function setAnswer(text, cls) { const a = $('answer'); a.textContent = text; a.className = cls || ''; }
+function setAnswer(text, cls) { const a = $('answer'); a.textContent = text; a.className = cls || ''; void a.offsetWidth; a.classList.add('in'); }
 function setThinking(msg) {
   const a = $('answer'); a.className = '';
   a.innerHTML = '<div class="skel"><div class="note"><span class="spin"></span><span></span></div><i></i><i></i><i></i></div>';
@@ -676,7 +796,7 @@ function timelineItem(r) {
 function refreshUI() {
   const st = ST || {}, s = $('status'), now = Date.now();
   const working = !!(st.busy || inflight), speaking = !working && (speakPending > now || speakUntil > now);
-  let cls = 'idle', txt = 'idle';
+  let cls = 'idle', txt = 'ready';
   if (lost) { cls = 'lost'; txt = 'lost the board'; }
   else if (recording) { cls = 'listening'; txt = 'listening'; }
   else if (working) { cls = 'thinking'; txt = 'thinking' + (st.busy ? ' · ' + st.busy : '') + ' on the NPU'; }
@@ -691,6 +811,9 @@ function refreshUI() {
     $('prog').style.width = (st.track_len ? Math.min(100, 100 * st.track_i / st.track_len) : 0) + '%';
     $('progtext').textContent = st.track_i + '/' + st.track_len;
   }
+  const pi = document.querySelector('.pttinfo'), asking = !recording && !!inflight && !!$('answer').querySelector('.skel');   // a question is in flight (not a map step)
+  pi.classList.toggle('rec', recording); pi.classList.toggle('busy', asking); $('ptt').classList.toggle('busy', asking);
+  if (!recording) $('pttlabel').textContent = asking ? 'Thinking…' : 'Hold to ask';
   $('step').disabled = !!inflight || replaying;
   $('ask').disabled = !!inflight || recording;
   $('ptt').disabled = !!inflight && !recording;
