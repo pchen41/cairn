@@ -600,7 +600,12 @@ def fact_lines(x, prefix=""):
     elif isinstance(x, list):
         out.append("%s: %s" % (prefix, ", ".join(str(v) for v in x[:4])))
     else:
-        out.append("%s: %s" % (prefix, x))
+        label, val = prefix, x
+        for suf, unit in ((" km", "km"), (" m", "metres"), (" min", "minutes"), (" s", "seconds")):
+            if prefix.endswith(suf) and isinstance(x, (int, float)) and not isinstance(x, bool):
+                label, val = prefix[:-len(suf)], "%s %s" % (x, unit)
+                break
+        out.append("%s: %s" % (label, val))
     return out
 
 
@@ -610,6 +615,11 @@ def say_prompt(facts, question=None, turns=None, knowledge=None, kind=None):
     facts = slim(facts)
     q = question.strip().replace('"', "'") if question else ""
     know = " ".join(k["text"] for k in (knowledge or []))
+    if kind == "photo":
+        info = ("\nInformation: " + know) if know else ""
+        return ("A hiker took a photo on the trail. The camera sees: %s%s\nIn one short, casual sentence, tell "
+                "them what it most likely is, speaking to them as \"you\". Don't mention where they are and "
+                "don't introduce yourself." % (facts.get("camera_sees", ""), info))
     if kind == "general" and know:
         return ("You are a friendly hiking guide in Muir Woods. Answer the hiker in one short, casual "
                 "sentence (two at most) using only this information. Don't introduce yourself.\nInformation: %s\nHiker: %s"
@@ -617,7 +627,7 @@ def say_prompt(facts, question=None, turns=None, knowledge=None, kind=None):
     lines = "\n".join("- " + l for l in fact_lines(facts))
     extra = ("\nGood to know: " + know) if know and not q else ""
     head = ("You are a friendly hiking guide talking to a hiker. These facts are about the hiker. Tell them in one short, casual "
-            "sentence (two at most), speaking to them as \"you\" (\"You're near...\"). Don't introduce "
+            "sentence (two at most), speaking to them as \"you\". Lead with what they asked about. Don't introduce "
             "yourself or say \"I'm\". Use the exact names, directions and distances below. Do not add other "
             "numbers.\n")
     return head + lines + extra + ("\nHiker: " + q if q else "")
@@ -1157,7 +1167,8 @@ class Cairn:
             facts = {"hiker_is_near": T.name(T.nearest_node(p)), "camera_sees": seen}
             rec["facts"] = facts
         know = self.knowledge_for(rec, seen, facts["hiker_is_near"])
-        call = self.omni.call("answer", say_prompt(facts, "What is this I'm looking at?", list(self.turns), know))
+        call = self.omni.call("answer", say_prompt(facts, "What is this I'm looking at?", list(self.turns), know,
+                                                  kind="photo"))
         rec["llm"].append(call)
         rec["answer"] = call["text"] if call["ok"] else None
         if not call["ok"]:
