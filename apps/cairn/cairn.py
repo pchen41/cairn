@@ -103,6 +103,8 @@ def strip_echo(text, prompt=ASR_PROMPT):
             break
     return t
 EXPLAIN_MAX_TOKENS = 120
+CALLOUT_GAP_TRACK_S = 8 * 60  # at least 8 minutes of hiking between proactive callouts
+CALLOUT_GAP_WALL_S = 20  # and at least 20 s on screen, so replay does not chatter
 
 
 def now_iso():
@@ -631,6 +633,7 @@ class Cairn:
         self.still_m = args.still_m
         self.junction_m = args.junction_m
         self.landmark_m = getattr(args, "landmark_m", 150.0)
+        self.callout_wall_gap_s = 0  # serve sets CALLOUT_GAP_WALL_S so the on-screen replay doesn't chatter
         self.log_path = args.log
         self.area = load_area(os.path.join(DATA, "area_context.json"))
         self.speak_enabled = bool(getattr(args, "speak", False))
@@ -658,6 +661,7 @@ class Cairn:
             self.itinerary = []  # ordered destination node ids
             self.reached = set()
             self.told_landmarks = set()  # each landmark tip fires once per session
+            self.last_callout = None  # (track time, monotonic) of the last junction/landmark callout
 
     # ---- location history and itinerary (all in code)
     def target(self):
@@ -923,15 +927,24 @@ class Cairn:
                 proposals = []
                 if decision["new_alerts"]:
                     proposals += ["log_alert", "nearest_bailout"]
-                if jid:
+                # proactive callouts (junction directions, landmark tips) are spaced out; safety alerts never wait
+                gap_ok = (self.last_callout is None or
+                          ((t - self.last_callout[0]).total_seconds() >= CALLOUT_GAP_TRACK_S and
+                           time.monotonic() - self.last_callout[1] >= self.callout_wall_gap_s))
+                if jid and (gap_ok or decision["new_alerts"]):
                     proposals.append("route_at_junction")
+                elif jid:
+                    decision["callout_held"] = "junction (cooldown)"
                 # proactive guide: a landmark tip, never in the same iteration as a safety alert
-                tip = None if decision["new_alerts"] else self.landmark_ahead(t, p)
+                tip = None if (decision["new_alerts"] or not gap_ok or "route_at_junction" in proposals) \
+                    else self.landmark_ahead(t, p)
                 if tip:
                     self.told_landmarks.add(tip["id"])
                     decision["approaching_landmark"] = tip["landmark"]
                     proposals.append("landmark_tip")
                     rec["landmark_tip"] = tip["landmark"]
+                if "route_at_junction" in proposals or "landmark_tip" in proposals:
+                    self.last_callout = (t, time.monotonic())
                 rec["proposals"] = proposals
                 actions, refused = self.act(proposals, p, decision)
                 rec["actions"], rec["refused"] = actions, refused
@@ -1197,6 +1210,7 @@ def cmd_serve(args):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     agent = Cairn(args)
+    agent.callout_wall_gap_s = CALLOUT_GAP_WALL_S
 
     def _warm():  # load the resident text model now so the first question is fast too
         with agent.omni.lock:
