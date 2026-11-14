@@ -630,6 +630,12 @@ def say_prompt(facts, question=None, turns=None, knowledge=None, kind=None):
             "sentence (two at most), speaking to them as \"you\". Lead with what they asked about. Don't introduce "
             "yourself or say \"I'm\". Use the exact names, directions and distances below. Do not add other "
             "numbers.\n")
+    if not q:  # proactive walk update or alert: nobody asked anything
+        head = ("Give the hiker a quick, friendly heads-up about what's coming up. Say it in one "
+                "short, casual sentence (two at most), speaking to them as \"you\". Don't say they asked anything, "
+                "don't introduce yourself, and don't say \"I\". Use the exact names, directions and distances "
+                "below. Do not add other numbers.\n")
+        extra = ("\nYou may add one short fact from this: " + know[:220]) if know else ""
     return head + lines + extra + ("\nHiker: " + q if q else "")
 
 
