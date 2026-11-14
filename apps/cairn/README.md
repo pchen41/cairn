@@ -1,6 +1,6 @@
 # Cairn: an offline voice trail guide
 
-Cairn is an always-on trail companion for Muir Woods that runs entirely on a Qualcomm Dragonwing IQ-9075. It watches your position against a local trail map and warns you when you go off-route, are too slow to get back before sunset, or have stopped moving for too long. At a junction you can hold a button and ask "which way to Cathedral Grove?". It tells you which trail to take, in two or three plain sentences, and can read the answer aloud on the board's speakers.
+Cairn is a prototype of a phone app: an always-on trail companion for Muir Woods that runs entirely on a Qualcomm Dragonwing IQ-9075. It watches your position against a local trail map and warns you when you go off-route, are too slow to get back before sunset, or have stopped moving for too long. At a junction you can hold a button and ask "which way to Cathedral Grove?". It tells you which trail to take, in two or three plain sentences, and can read the answer aloud on the board's speakers.
 
 ## Why not a cloud API call?
 
@@ -18,6 +18,7 @@ position (replayed track, or a click on the map)
 
 - **The model does no maths.** Distances (haversine), compass bearings, Dijkstra routing over the trail graph, pace and time-to-sunset are all computed in code. Omni only does three things: transcribes the spoken question, turns the computed facts into short sentences, and optionally speaks them.
 - **Memory.** Cairn keeps a breadcrumb trail of where you have been, so a route answer knows which junction you came from and won't send you back the way you came. It also keeps the last few questions and answers and an ordered itinerary ("Cathedral Grove first, then Pantoll").
+- **Camera: "What is this?"** The phone camera (the laptop webcam in this prototype) or a sample photo goes to `/api/look` as a 512×512 image. Omni describes it on the NPU, code matches the description to local knowledge, and a second capped call answers like a guide. For example, a photo of "a bright yellow, elongated organism" becomes "That's a banana slug…".
 - **Local knowledge.** `data/area_context.json` holds Wikipedia summaries (CC BY-SA 4.0) fetched once during setup. Code picks one or two relevant snippets per answer, so the guide talks like a friend who knows the area.
 - **Guards.** Every model call is capped (ASR 96 tokens, answers 120). Each is checked for an empty answer, a natural stop and current-request Hexagon v73/two-NSP evidence, and retried once. Prompts carry a unique `[request:uuid]` tag. Errors are logged as data and the loop keeps running. Anything not on the allowlist is refused and logged.
 - **Standard library only.** Nothing is fetched at runtime: no map tiles, CDN or fonts. The map is an inline SVG drawn from `data/trails.json`.
@@ -32,6 +33,7 @@ position (replayed track, or a click on the map)
 | `data/trails.json` | Muir Woods trail graph: trailheads, junctions, water, bail-out points, destinations, sunset |
 | `data/track.json` | Replayed hike (`make_track.py` regenerates it) that triggers every rule |
 | `data/area_context.json` | Local background knowledge (Wikipedia summaries) |
+| `data/samples/` | Stand-in camera photos, 512×512 PPM, from Wikimedia Commons: "Redwood Trunk" by ~jar() (CC BY 4.0), "Banana Slug on the ground" (CC BY-SA 4.0), "Sword fern polystichum munitum" (public domain) |
 
 ## Run it
 

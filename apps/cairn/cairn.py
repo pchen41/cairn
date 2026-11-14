@@ -39,7 +39,12 @@ try:
 except ImportError:  # only --mock-llm works without it
     zetic_run = None
 
-ALLOWED_ACTIONS = ("log_alert", "nearest_bailout", "route_at_junction", "nearest_water", "speak", "landmark_tip")
+ALLOWED_ACTIONS = ("log_alert", "nearest_bailout", "route_at_junction", "nearest_water", "speak", "landmark_tip",
+                   "describe_photo")
+VISION_PROMPT = ("This photo is from a hiker's camera on a forest trail. In one or two short sentences, say what "
+                 "is in it: a plant, tree, animal, sign or trail feature. If you are not sure, say so.")
+VISION_MAX_TOKENS = 80
+PPM_HEADER = b"P6\n512 512\n255\n"  # the SDK takes exactly 512x512 RGB; the browser sends binary PPM
 
 VOLUME_CONTROL = "stream0.vol_ctrl0 MultiMedia1 Playback Volu"  # board playback stream used by aplay plughw:0,0
 VOLUME_MAX = 60  # percent; keeps a slip of the slider from blasting the speakers
@@ -262,10 +267,12 @@ class Omni:
         self.lock = threading.Lock()
         self.busy = None
 
-    def _once(self, prompt, audio, max_tokens):
+    def _once(self, prompt, audio, max_tokens, image=None):
         if self.mock:
             time.sleep(0.05)
-            if audio:
+            if image:
+                text = "(mock vision) A tall coast redwood trunk with ferns at its base."
+            elif audio:
                 text = "(mock transcript) Which way to Cathedral Grove?"
             else:
                 text = "(mock answer, no model ran) " + prompt[prompt.find("{"):][:160]
@@ -274,23 +281,23 @@ class Omni:
         if zetic_run is None:
             return {"ok": False, "text": "", "errors": ["run.py (ZETIC wrapper) not found next to cairn.py "
                                                          "or in examples/zetic-lfm"], "timings": {}}
-        return zetic_run.run(self.sdk, self.model, prompt, audio=audio, max_tokens=max_tokens,
+        return zetic_run.run(self.sdk, self.model, prompt, audio=audio, image=image, max_tokens=max_tokens,
                              timeout=self.timeout)
 
-    def call(self, purpose, prompt, audio=None, max_tokens=EXPLAIN_MAX_TOKENS):
+    def call(self, purpose, prompt, audio=None, max_tokens=EXPLAIN_MAX_TOKENS, image=None):
         with self.lock:
             self.busy = purpose
             try:
                 attempts = []
                 for _ in range(2):
-                    r = self._once(prompt, audio, max_tokens)
+                    r = self._once(prompt, audio, max_tokens, image)
                     attempts.append(r)
                     if r.get("ok"):
                         break
             finally:
                 self.busy = None
         r = attempts[-1]
-        return {"purpose": purpose, "prompt": prompt, "audio": audio, "max_tokens": max_tokens,
+        return {"purpose": purpose, "prompt": prompt, "audio": audio, "image": image, "max_tokens": max_tokens,
                 "ok": bool(r.get("ok")), "text": r.get("text", ""), "tokens": r.get("completion_tokens"),
                 "finish": r.get("finish_reason"), "errors": r.get("errors", []),
                 "timings": r.get("timings", {}), "device_evidence": r.get("device_evidence"),
@@ -406,7 +413,10 @@ TOPIC_ALIASES = {"area": "Muir Woods National", "history": "Muir Woods National"
                  "redwood": "Sequoia sempervirens", "redwoods": "Sequoia sempervirens",
                  "tree": "Sequoia sempervirens", "trees": "Sequoia sempervirens", "muir": "John Muir",
                  "tamalpais": "Mount Tamalpais", "mountain": "Mount Tamalpais", "mount": "Mount Tamalpais",
-                 "dipsea": "Dipsea", "creek": "Redwood Creek", "salmon": "Redwood Creek", "kent": "William Kent"}
+                 "dipsea": "Dipsea", "creek": "Redwood Creek", "salmon": "Redwood Creek", "kent": "William Kent",
+                 "slug": "Banana slug", "slugs": "Banana slug", "yellow": "Banana slug",
+                 "fern": "Polystichum", "ferns": "Polystichum", "bark": "Sequoia sempervirens",
+                 "trunk": "Sequoia sempervirens", "tree": "Sequoia sempervirens"}
 STOP = {"what", "where", "which", "there", "this", "that", "with", "about", "tell", "know", "near", "from",
         "have", "does", "your", "they", "them", "when", "would", "could", "should", "there", "want", "going"}
 
@@ -952,6 +962,40 @@ class Cairn:
         self.write(rec)
         return rec
 
+    def look(self, image):
+        """Camera question ("what is this?"): Omni describes a 512x512 photo on the NPU, code picks local
+        knowledge from that description, and one capped answer call phrases it for the hiker."""
+        t0 = time.perf_counter()
+        rec = {"t": now_iso(), "kind": "look", "errors": [], "llm": [], "question": "What is this?",
+               "proposals": ["describe_photo"], "actions": []}
+        call = self.omni.call("vision", VISION_PROMPT, image=image, max_tokens=VISION_MAX_TOKENS)
+        rec["llm"].append(call)
+        if not call["ok"]:
+            rec["errors"].append("photo description failed: %s" % "; ".join(call["errors"])[:300])
+            rec["loop_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+            self.write(rec)
+            return rec
+        seen = call["text"].strip()
+        rec["actions"].append({"name": "describe_photo", "result": {"camera_sees": seen}})
+        with self.lock:
+            p = self.position
+            if p is None and self.track:
+                p = (self.track[0]["lat"], self.track[0]["lon"])
+            T = self.trails
+            facts = {"you_are_near": T.name(T.nearest_node(p)), "camera_sees": seen}
+            rec["facts"] = facts
+        know = self.knowledge_for(rec, seen, facts["you_are_near"])
+        call = self.omni.call("answer", say_prompt(facts, "What is this I'm looking at?", list(self.turns), know))
+        rec["llm"].append(call)
+        rec["answer"] = call["text"] if call["ok"] else None
+        if not call["ok"]:
+            rec["errors"].append("answer failed: %s" % "; ".join(call["errors"])[:300])
+        with self.lock:
+            self.turns.append({"q": "(photo) what is this?", "a": rec["answer"] or ""})
+        self.maybe_speak(rec, rec["answer"])
+        rec["loop_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+        self.write(rec)
+        return rec
 
 # ---------------------------------------------------------------- CLI: replay
 
@@ -1056,6 +1100,20 @@ def cmd_serve(args):
             path, _, query = self.path.partition("?")
             if path == "/":
                 return self.send(200, page, "text/html; charset=utf-8")
+            if path == "/api/samples":
+                try:
+                    with open(os.path.join(DATA, "samples", "samples.json")) as f:
+                        return self.send(200, json.load(f))
+                except (OSError, ValueError):
+                    return self.send(200, [])
+            if path.startswith("/api/sample/"):
+                name = path[len("/api/sample/"):]
+                if re.fullmatch(r"[a-z_]{1,40}\.ppm", name):
+                    fp = os.path.join(DATA, "samples", name)
+                    if os.path.isfile(fp):
+                        with open(fp, "rb") as f:
+                            return self.send(200, f.read(), "image/x-portable-pixmap")
+                return self.send(404, {"error": "not found"})
             if path == "/api/graph":
                 return self.send(200, graph())
             if path == "/api/state":
@@ -1092,6 +1150,13 @@ def cmd_serve(args):
                     with open(wav, "wb") as f:
                         f.write(raw)
                     return self.send(200, agent.ask(wav=wav))
+                if self.path == "/api/look":
+                    if not raw.startswith(PPM_HEADER) or len(raw) != len(PPM_HEADER) + 512 * 512 * 3:
+                        return self.send(400, {"error": "expected a 512x512 binary PPM (P6)"})
+                    img = os.path.join(rec_dir, "look-%s.ppm" % uuid.uuid4().hex)
+                    with open(img, "wb") as f:
+                        f.write(raw)
+                    return self.send(200, agent.look(img))
                 data = json.loads(raw or b"{}")
                 if self.path == "/api/ask":
                     q = str(data.get("text", "")).strip()[:500]
