@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairn Trail Guide</title>
+<style>
+:root { --bg:#f4f1ea; --panel:#fffdf8; --ink:#1f2a24; --muted:#6b736d; --line:#d9d3c7; --trail:#8a6d3b;
+        --accent:#2f6b4f; --alert:#b3261e; --water:#2a6fb0; --bail:#a05a00; --dest:#6a3fa0; }
+@media (prefers-color-scheme: dark) { :root { --bg:#141816; --panel:#1c211e; --ink:#e7ece8; --muted:#9aa39d;
+        --line:#2e3631; --trail:#c9a46a; --accent:#6cc79a; --alert:#ff6b5f; --water:#6fb2ff; --bail:#f0a64a; --dest:#c49bff; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.4 -apple-system, system-ui, sans-serif; }
+header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+header h1 { font-size:18px; margin:0; }
+header .tag { color:var(--muted); font-size:12px; }
+#status { margin-left:auto; font-size:12px; color:var(--muted); }
+#status.busy { color:var(--accent); font-weight:600; }
+main { display:grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap:12px; padding:12px 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px; min-width:0; }
+.card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 6px; }
+svg { width:100%; height:auto; display:block; cursor:crosshair; background:color-mix(in srgb, var(--panel) 80%, var(--accent) 6%); border-radius:8px; }
+.controls { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center; }
+button, select, input[type=text] { font:inherit; padding:6px 10px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--ink); }
+button { cursor:pointer; }
+button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+#ptt { background:var(--alert); color:#fff; border-color:var(--alert); font-weight:600; user-select:none; touch-action:none; }
+#ptt.rec { outline:3px solid color-mix(in srgb, var(--alert) 40%, transparent); }
+#q { flex:1; min-width:160px; }
+pre { white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.45 ui-monospace, Menlo, monospace; max-height:220px; overflow:auto; }
+#answer { font-size:16px; line-height:1.5; min-height:48px; }
+#steps { max-height:320px; overflow:auto; font:12px/1.45 ui-monospace, Menlo, monospace; }
+#steps div { padding:3px 0; border-bottom:1px dashed var(--line); }
+.al { color:var(--alert); font-weight:600; } .jn { color:var(--accent); font-weight:600; } .er { color:var(--alert); }
+.legend { font-size:11px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; margin-top:4px; }
+.spin { display:inline-block; width:10px; height:10px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:s 0.8s linear infinite; vertical-align:-1px; }
+@keyframes s { to { transform:rotate(360deg); } }
+.right { display:grid; gap:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cairn</h1>
+  <span class="tag">offline trail guide · LFM3-Omni-2B on the IQ-9075 NPU · no network needed</span>
+  <span id="status">idle</span>
+</header>
+<main>
+  <section class="card">
+    <h2>Map · click to spoof GPS</h2>
+    <svg id="map" viewBox="0 0 1000 800" role="img" aria-label="Trail map"></svg>
+    <div class="legend"><span style="color:var(--trail)">— trail</span><span style="color:var(--dest)">● destination</span>
+      <span style="color:var(--water)">● water</span><span style="color:var(--bail)">● bail-out</span><span>○ junction</span>
+      <span style="color:var(--alert)">● you</span></div>
+    <div class="controls">
+      <label>Destination <select id="dest"></select></label>
+      <span id="itin" style="font-size:12px;color:var(--muted)">itinerary: none</span>
+      <button id="step">Step</button>
+      <button id="replay" class="primary">Replay track</button>
+      <button id="reset">Reset</button>
+    </div>
+    <div class="controls">
+      <button id="ptt">Hold to ask</button>
+      <input id="q" type="text" placeholder="or type: which way to the lake?">
+      <button id="ask">Ask</button>
+    </div>
+  </section>
+  <section class="right">
+    <div class="card"><h2>Cairn says</h2><div id="answer">Click the map or press Replay. Hold the red button and ask a question.</div></div>
+    <div class="card"><h2>Prompt sent to Omni</h2><pre id="prompt">-</pre></div>
+    <div class="card"><h2>Omni output</h2><pre id="output">-</pre></div>
+    <div class="card"><h2>Agent steps (JSONL log)</h2><div id="steps"></div></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let G = null, proj = null, since = 0, replaying = false, inflight = 0;
+const W = 1000, H = 800, PAD = 40;
+
+async function api(path, body, ctype) {
+  const opt = body === undefined ? {} : { method: 'POST', body: ctype ? body : JSON.stringify(body),
+    headers: { 'Content-Type': ctype || 'application/json' } };
+  const r = await fetch(path, opt);
+  return r.json();
+}
+
+function makeProj(g) {
+  let pts = g.nodes.map(n => [n.lat, n.lon]);
+  g.edges.forEach(e => pts = pts.concat(e.line));
+  const lats = pts.map(p => p[0]), lons = pts.map(p => p[1]);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const k = Math.cos((minLat + maxLat) / 2 * Math.PI / 180);
+  const sx = (W - 2 * PAD - 170) / ((maxLon - minLon) * k), sy = (H - 2 * PAD) / (maxLat - minLat);
+  const s = Math.min(sx, sy);
+  const ox = (W - 170 - (maxLon - minLon) * k * s) / 2, oy = (H - (maxLat - minLat) * s) / 2;
+  return {
+    xy: (lat, lon) => [ox + (lon - minLon) * k * s, oy + (maxLat - lat) * s],
+    ll: (x, y) => [maxLat - (y - oy) / s, minLon + (x - ox) / (k * s)],
+  };
+}
+
+function el(tag, attrs, text) {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text) e.textContent = text;
+  return e;
+}
+
+function drawMap() {
+  const svg = $('map'); svg.innerHTML = '';
+  const css = getComputedStyle(document.documentElement);
+  const c = (v) => css.getPropertyValue(v).trim();
+  G.edges.forEach(e => {
+    const d = e.line.map((p, i) => (i ? 'L' : 'M') + proj.xy(p[0], p[1]).map(v => v.toFixed(1)).join(',')).join(' ');
+    svg.appendChild(el('path', { d, fill: 'none', stroke: c('--trail'), 'stroke-width': 3, 'stroke-linecap': 'round', opacity: .85 }));
+    const mid = e.line[Math.floor(e.line.length / 2)], [mx, my] = proj.xy(mid[0], mid[1]);
+    svg.appendChild(el('text', { x: mx + 4, y: my - 4, 'font-size': 11, fill: c('--muted') }, e.trail));
+  });
+  const tr = G.track.map((p, i) => (i ? 'L' : 'M') + proj.xy(p[0], p[1]).map(v => v.toFixed(1)).join(',')).join(' ');
+  svg.appendChild(el('path', { d: tr, fill: 'none', stroke: c('--alert'), 'stroke-width': 1, 'stroke-dasharray': '3 4', opacity: .5 }));
+  svg.appendChild(el('path', { id: 'walked', d: '', fill: 'none', stroke: c('--alert'), 'stroke-width': 4, opacity: .4, 'stroke-linejoin': 'round' }));
+  G.nodes.forEach(n => {
+    const [x, y] = proj.xy(n.lat, n.lon);
+    const kind = n.kinds.includes('destination') ? '--dest' : n.kinds.includes('water') ? '--water' : n.kinds.includes('bailout') ? '--bail' : null;
+    svg.appendChild(el('circle', { cx: x, cy: y, r: kind ? 7 : 5, fill: kind ? c(kind) : c('--panel'), stroke: c('--ink'), 'stroke-width': 1.2 }));
+    svg.appendChild(el('text', { x: x + 9, y: y + 4, 'font-size': 13, 'font-weight': 600, fill: c('--ink') }, n.name));
+  });
+  svg.appendChild(el('circle', { id: 'me', cx: -50, cy: -50, r: 9, fill: c('--alert'), stroke: '#fff', 'stroke-width': 3 }));
+}
+
+let walked = [];
+function setMe(pos) {
+  if (!pos) return;
+  const [x, y] = proj.xy(pos[0], pos[1]);
+  $('me').setAttribute('cx', x); $('me').setAttribute('cy', y);
+}
+function drawCrumbs(b) {  // breadcrumb trail kept by the board, drawn faded
+  $('walked').setAttribute('d', b.map((p, i) => (i ? 'L' : 'M') + proj.xy(p[0], p[1]).map(v => v.toFixed(1)).join(',')).join(' '));
+}
+function showItin(st) {
+  const it = st.itinerary || [];
+  $('itin').textContent = it.length ? 'itinerary: ' + it.map(v => (v.reached ? '✓ ' : '') + v.name).join(' → ') : 'itinerary: none';
+  if (st.destination && $('dest').value !== st.destination) $('dest').value = st.destination;
+}
+
+function showRecord(r) {
+  if (!r || r.done) return;
+  const calls = r.llm || [];
+  if (calls.length) {
+    $('prompt').textContent = calls.map(c => `[${c.purpose}] max_tokens=${c.max_tokens}${c.audio ? ' audio=' + c.audio.split('/').pop() : ''}\n${c.prompt}`).join('\n\n');
+    $('output').textContent = calls.map(c => `[${c.purpose}] ok=${c.ok} tokens=${c.tokens} finish=${c.finish} retried=${c.retried}` +
+      ` wall=${c.timings && c.timings.wall_s ? c.timings.wall_s.toFixed(1) + 's' : '-'}\n` +
+      (c.device_evidence ? 'device: ' + c.device_evidence + '\n' : '') + (c.errors.length ? 'errors: ' + c.errors.join('; ') + '\n' : '') + (c.text || '')).join('\n\n');
+  }
+  const say = r.answer || r.explanation;
+  if (say) $('answer').textContent = say;
+  else if (r.kind === 'ask' && r.errors.length) $('answer').textContent = 'Sorry: ' + r.errors.join('; ');
+}
+
+function stepLine(r) {
+  const d = r.decision || {}, o = r.observation || {};
+  let s = `#${r.seq} ${r.kind}`;
+  let cls = '';
+  if (r.kind === 'iteration') {
+    s += ` ${(o.time_local || '').slice(11, 16)} ${o.source} (${o.lat}, ${o.lon}) active=[${(d.active || []).join(',')}]`;
+    if ((d.new_alerts || []).length) { s += ` ALERT ${d.new_alerts.join(',')}`; cls = 'al'; }
+    if (d.new_junction) { s += ` JUNCTION ${d.new_junction}`; cls = cls || 'jn'; }
+  } else {
+    s += ` q="${r.question || ''}" intent=${r.intent ? r.intent.kind : '-'}`; cls = 'jn';
+  }
+  if ((r.proposals || []).length) s += ` proposals=[${r.proposals.join(',')}]`;
+  if ((r.actions || []).length) s += ` actions=[${r.actions.map(a => a.name).join(',')}]`;
+  if ((r.refused || []).length) s += ` refused=[${r.refused.map(a => a.name).join(',')}]`;
+  (r.llm || []).forEach(c => s += ` llm:${c.purpose}=${c.ok ? 'ok' : 'ERR'}`);
+  if ((r.errors || []).length) { s += ` errors=${r.errors.join('; ')}`; cls = 'er'; }
+  if (r.loop_ms !== undefined) s += ` ${Math.round(r.loop_ms)}ms`;
+  const div = document.createElement('div'); div.textContent = s; if (cls) div.className = cls;
+  return div;
+}
+
+async function poll() {
+  try {
+    const j = await api('/api/log?since=' + since);
+    const box = $('steps');
+    j.records.forEach(r => { box.prepend(stepLine(r)); since = r.seq + 1; });
+    while (box.childNodes.length > 300) box.removeChild(box.lastChild);
+    const st = j.state, s = $('status');
+    drawCrumbs(st.breadcrumbs || []); showItin(st); if (st.position) setMe(st.position);
+    if (st.busy || inflight) { s.innerHTML = `<span class="spin"></span> Omni running on the NPU${st.busy ? ' (' + st.busy + ')' : ''}…`; s.className = 'busy'; }
+    else { s.textContent = `idle · ${st.time_local ? st.time_local.slice(11, 16) : '--:--'} · track ${st.track_i}/${st.track_len}${st.mock ? ' · MOCK LLM' : ''}`; s.className = ''; }
+  } catch (e) { $('status').textContent = 'UI lost the board: ' + e; }
+  setTimeout(poll, 700);
+}
+
+async function busy(fn) { inflight++; try { return await fn(); } finally { inflight--; } }
+
+async function step() {
+  const r = await busy(() => api('/api/step', {}));
+  if (r.done) return false;
+  if (r.observation) setMe([r.observation.lat, r.observation.lon]);
+  showRecord(r);
+  return true;
+}
+
+async function replay() {
+  if (replaying) { replaying = false; $('replay').textContent = 'Replay track'; return; }
+  replaying = true; $('replay').textContent = 'Pause';
+  while (replaying) {
+    const more = await step();
+    if (!more) break;
+    await new Promise(res => setTimeout(res, 600));
+  }
+  replaying = false; $('replay').textContent = 'Replay track';
+}
+
+async function ask(text) {
+  $('answer').innerHTML = '<span class="spin"></span> thinking on the board…';
+  showRecord(await busy(() => api('/api/ask', { text })));
+}
+
+// ---- push-to-talk: record in the browser, convert to 16 kHz mono PCM16 WAV, POST to the board
+let rec = null, chunks = [], stream = null, t0 = 0;
+async function startRec() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  } catch (e) { $('answer').textContent = 'Microphone blocked: ' + e.message + ' (open the UI via http://localhost)'; return; }
+  chunks = []; rec = new MediaRecorder(stream); rec.ondataavailable = (e) => chunks.push(e.data);
+  rec.start(); t0 = Date.now(); $('ptt').classList.add('rec'); $('ptt').textContent = 'Listening… release to send';
+  setTimeout(() => { if (rec && rec.state === 'recording' && Date.now() - t0 >= 19500) stopRec(); }, 20000);
+}
+async function stopRec() {
+  if (!rec || rec.state !== 'recording') return;
+  const done = new Promise(res => rec.onstop = res);
+  rec.stop(); await done; stream.getTracks().forEach(t => t.stop());
+  $('ptt').classList.remove('rec'); $('ptt').textContent = 'Hold to ask';
+  if (Date.now() - t0 < 500) { $('answer').textContent = 'Hold the button while you speak.'; return; }
+  const blob = new Blob(chunks, { type: rec.mimeType }); rec = null;
+  const wav = await toWav16k(await blob.arrayBuffer());
+  $('answer').innerHTML = '<span class="spin"></span> hearing you on the board…';
+  showRecord(await busy(() => api('/api/ask', wav, 'audio/wav')));
+}
+async function toWav16k(buf) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const audio = await ctx.decodeAudioData(buf); ctx.close();
+  const n = Math.ceil(audio.duration * 16000);
+  const off = new OfflineAudioContext(1, n, 16000);
+  const src = off.createBufferSource(); src.buffer = audio; src.connect(off.destination); src.start();
+  const out = (await off.startRendering()).getChannelData(0);
+  const b = new ArrayBuffer(44 + out.length * 2), v = new DataView(b);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + out.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16000, true);
+  v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, out.length * 2, true);
+  for (let i = 0; i < out.length; i++) { const s = Math.max(-1, Math.min(1, out[i])); v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true); }
+  return new Blob([b], { type: 'audio/wav' });
+}
+
+async function init() {
+  G = await api('/api/graph'); proj = makeProj(G); drawMap();
+  const st = await api('/api/state');
+  const sel = $('dest');
+  G.destinations.forEach(d => { const o = document.createElement('option'); o.value = d.id; o.textContent = d.name; sel.appendChild(o); });
+  sel.value = st.destination;
+  if (st.position) setMe(st.position);
+  sel.onchange = () => api('/api/destination', { id: sel.value });
+  $('step').onclick = step;
+  $('replay').onclick = replay;
+  $('reset').onclick = async () => { replaying = false; walked = []; await api('/api/reset', {}); drawMap(); since = 0; $('steps').innerHTML = ''; };
+  $('ask').onclick = () => { const q = $('q').value.trim(); if (q) ask(q); };
+  $('q').onkeydown = (e) => { if (e.key === 'Enter') $('ask').click(); };
+  $('map').onclick = async (e) => {
+    const svg = $('map'), pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const [lat, lon] = proj.ll(p.x, p.y);
+    setMe([lat, lon]);
+    showRecord(await busy(() => api('/api/position', { lat, lon })));
+  };
+  const ptt = $('ptt');
+  ptt.addEventListener('pointerdown', (e) => { e.preventDefault(); ptt.setPointerCapture(e.pointerId); startRec(); });
+  ptt.addEventListener('pointerup', stopRec);
+  ptt.addEventListener('pointercancel', stopRec);
+  poll();
+}
+init();
+</script>
+</body>
+</html>

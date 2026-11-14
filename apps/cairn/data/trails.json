@@ -1,0 +1,46 @@
+{
+  "_note": "Simplified Marin Headlands trail graph for the Cairn demo. Coordinates are approximate and hand-placed; do not use for real navigation.",
+  "config": {
+    "area": "Marin Headlands, CA",
+    "sunset_local": "16:58",
+    "utc_offset": "-08:00",
+    "home_trailhead": "tv_th",
+    "default_destination": "rodeo_lagoon"
+  },
+  "nodes": [
+    {"id": "tv_th", "name": "Tennessee Valley Trailhead", "kinds": ["trailhead", "bailout", "water"], "lat": 37.8606, "lon": -122.5359},
+    {"id": "marincello_th", "name": "Marincello Trailhead", "kinds": ["trailhead", "bailout"], "lat": 37.8640, "lon": -122.5318},
+    {"id": "old_springs_jct", "name": "Old Springs Junction", "kinds": ["junction"], "lat": 37.8584, "lon": -122.5350},
+    {"id": "fox_jct", "name": "Fox Trail Junction", "kinds": ["junction"], "lat": 37.8505, "lon": -122.5372},
+    {"id": "tv_coastal_jct", "name": "Coastal Trail Junction", "kinds": ["junction"], "lat": 37.8378, "lon": -122.5385},
+    {"id": "fox_top", "name": "Fox and Coastal Ridge Junction", "kinds": ["junction"], "lat": 37.8440, "lon": -122.5320},
+    {"id": "miwok_stables", "name": "Miwok Stables water tap", "kinds": ["water", "junction"], "lat": 37.8553, "lon": -122.5243},
+    {"id": "miwok_wolf_jct", "name": "Miwok and Wolf Ridge Junction", "kinds": ["junction"], "lat": 37.8418, "lon": -122.5262},
+    {"id": "wolf_coastal_jct", "name": "Hill 88 Saddle", "kinds": ["junction"], "lat": 37.8360, "lon": -122.5320},
+    {"id": "tennessee_beach", "name": "Tennessee Beach", "kinds": ["destination"], "lat": 37.8318, "lon": -122.5392},
+    {"id": "pirates_cove", "name": "Pirates Cove", "kinds": ["destination"], "lat": 37.8418, "lon": -122.5489},
+    {"id": "muir_beach", "name": "Muir Beach", "kinds": ["destination", "bailout", "trailhead"], "lat": 37.8603, "lon": -122.5753},
+    {"id": "rodeo_lagoon", "name": "Rodeo Lagoon", "kinds": ["destination", "junction"], "lat": 37.8318, "lon": -122.5262},
+    {"id": "rodeo_beach", "name": "Rodeo Beach", "kinds": ["destination", "bailout"], "lat": 37.8308, "lon": -122.5385},
+    {"id": "visitor_center", "name": "Marin Headlands Visitor Center", "kinds": ["destination", "bailout", "water"], "lat": 37.8316, "lon": -122.5233}
+  ],
+  "edges": [
+    {"from": "tv_th", "to": "old_springs_jct", "trail": "Tennessee Valley Trail", "points": []},
+    {"from": "tv_th", "to": "marincello_th", "trail": "Marincello Trail", "points": [[37.8622, -122.5340]]},
+    {"from": "old_springs_jct", "to": "fox_jct", "trail": "Tennessee Valley Trail", "points": [[37.8548, -122.5362]]},
+    {"from": "fox_jct", "to": "tv_coastal_jct", "trail": "Tennessee Valley Trail", "points": [[37.8452, -122.5381], [37.8410, -122.5379]]},
+    {"from": "tv_coastal_jct", "to": "tennessee_beach", "trail": "Tennessee Valley Trail", "points": [[37.8350, -122.5394]]},
+    {"from": "tv_coastal_jct", "to": "pirates_cove", "trail": "Coastal Trail", "points": [[37.8392, -122.5430], [37.8412, -122.5462]]},
+    {"from": "pirates_cove", "to": "muir_beach", "trail": "Coastal Trail", "points": [[37.8480, -122.5560], [37.8545, -122.5680]]},
+    {"from": "old_springs_jct", "to": "miwok_stables", "trail": "Old Springs Trail", "points": [[37.8575, -122.5310], [37.8562, -122.5275]]},
+    {"from": "miwok_stables", "to": "miwok_wolf_jct", "trail": "Miwok Trail", "points": [[37.8510, -122.5250], [37.8465, -122.5258]]},
+    {"from": "miwok_wolf_jct", "to": "rodeo_lagoon", "trail": "Miwok Trail", "points": [[37.8380, -122.5250], [37.8345, -122.5255]]},
+    {"from": "miwok_wolf_jct", "to": "wolf_coastal_jct", "trail": "Wolf Ridge Trail", "points": [[37.8398, -122.5295]]},
+    {"from": "fox_jct", "to": "fox_top", "trail": "Fox Trail", "points": [[37.8480, -122.5345]]},
+    {"from": "tv_coastal_jct", "to": "fox_top", "trail": "Coastal Trail", "points": [[37.8405, -122.5350]]},
+    {"from": "fox_top", "to": "wolf_coastal_jct", "trail": "Coastal Trail", "points": [[37.8400, -122.5322]]},
+    {"from": "wolf_coastal_jct", "to": "rodeo_beach", "trail": "Coastal Trail", "points": [[37.8335, -122.5350]]},
+    {"from": "rodeo_beach", "to": "rodeo_lagoon", "trail": "Lagoon Trail", "points": [[37.8312, -122.5330]]},
+    {"from": "rodeo_lagoon", "to": "visitor_center", "trail": "Lagoon Trail", "points": []}
+  ]
+}
