@@ -587,16 +587,35 @@ def pick_knowledge(articles, question, places, k=2):
     return [{"title": a["title"], "text": trim_sentences(a.get("extract", ""), per)} for a in chosen]
 
 
-def say_prompt(facts, question=None, turns=None, knowledge=None):
+def fact_lines(x, prefix=""):
+    """Flatten computed facts into short 'name: value' lines; small models read these better than JSON."""
+    out = []
+    if isinstance(x, dict):
+        for k, v in x.items():
+            if k in ("via", "fired", "active_alerts", "area") or v in (None, "", [], {}):
+                continue
+            out += fact_lines(v, (prefix + " " if prefix else "") + k.replace("_", " "))
+    elif isinstance(x, list):
+        out.append("%s: %s" % (prefix, ", ".join(str(v) for v in x[:4])))
+    else:
+        out.append("%s: %s" % (prefix, x))
+    return out
+
+
+def say_prompt(facts, question=None, turns=None, knowledge=None, kind=None):
+    """Short prompt for a 2B model: one instruction, the facts as plain lines, the question last.
+    General questions get only the local knowledge, so navigation facts don't pull the answer off topic."""
     facts = slim(facts)
-    ask = "The hiker asked: \"%s\". " % question.strip().replace('"', "'") if question else ""
-    earlier = ""
-    if turns:  # last 2 turns, trimmed, so phrasing stays consistent; route maths stays in code
-        earlier = ""  # past turns made the 2B model repeat itself; itinerary and breadcrumbs are kept in code
-    know = ""
-    if knowledge:
-        know = "Local knowledge: " + " ".join("%s: %s" % (k["title"], k["text"]) for k in knowledge) + " "
-    return SAY.format(facts=json.dumps(facts, separators=(",", ":")), knowledge=know, earlier=earlier, ask=ask)
+    q = question.strip().replace('"', "'") if question else ""
+    know = " ".join(k["text"] for k in (knowledge or []))
+    if kind == "general" and know:
+        return ("You are Cairn, a friendly hiking guide in Muir Woods. Answer the hiker in one or two short, "
+                "casual sentences using only this information: %s\nHiker: %s" % (know, q))
+    lines = "\n".join("- " + l for l in fact_lines(facts))
+    extra = ("\nGood to know: " + know) if know and not q else ""
+    head = ("You are Cairn, a friendly hiking guide. Tell the hiker this in one or two short, casual sentences. "
+            "Use the exact names, directions and distances below. Do not add other numbers.\n")
+    return head + lines + extra + ("\nHiker: " + q if q else "")
 
 
 # ---------------------------------------------------------------- the agent
@@ -1084,7 +1103,7 @@ class Cairn:
             rec["facts"] = facts
         know = self.knowledge_for(rec, text or "", self.trails.name(self.target()), facts.get("you_are_near", ""),
                                   (rec.get("intent") or {}).get("target") or "")
-        call = self.omni.call("answer", say_prompt(facts, text, list(self.turns), know))
+        call = self.omni.call("answer", say_prompt(facts, text, list(self.turns), know, kind=kind))
         rec["llm"].append(call)
         rec["answer"] = call["text"] if call["ok"] else None
         if not call["ok"]:
