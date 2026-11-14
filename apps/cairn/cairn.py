@@ -21,6 +21,8 @@ import json
 import math
 import os
 import sys
+import re
+import subprocess
 import threading
 import time
 import uuid
@@ -38,6 +40,24 @@ except ImportError:  # only --mock-llm works without it
     zetic_run = None
 
 ALLOWED_ACTIONS = ("log_alert", "nearest_bailout", "route_at_junction", "nearest_water", "speak", "landmark_tip")
+
+VOLUME_CONTROL = "stream0.vol_ctrl0 MultiMedia1 Playback Volu"  # board playback stream used by aplay plughw:0,0
+VOLUME_MAX = 60  # percent; keeps a slip of the slider from blasting the speakers
+
+
+def set_volume(percent, mock=False):
+    """Set the board's playback volume (0..VOLUME_MAX %) with amixer; returns the percent applied or None."""
+    pct = max(0, min(VOLUME_MAX, int(percent)))
+    if mock:
+        return pct
+    try:
+        out = subprocess.run(["amixer", "-c", "0", "sset", VOLUME_CONTROL, "%d%%" % pct],
+                             capture_output=True, text=True, timeout=5)
+        m = re.search(r"\[(\d+)%\]", out.stdout)
+        return int(m.group(1)) if out.returncode == 0 and m else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
 EARTH_R = 6371000.0
 COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 COMPASS_WORDS = {"N": "north", "NNE": "north-northeast", "NE": "northeast", "ENE": "east-northeast",
@@ -999,7 +1019,8 @@ def cmd_serve(args):
                 "active": sorted(agent.active), "busy": agent.omni.busy, "mock": args.mock_llm,
                 "target": agent.target(), "itinerary": agent.itinerary_view(),
                 "breadcrumbs": [[b["lat"], b["lon"]] for b in agent.breadcrumbs[-800:]],
-                "turns": list(agent.turns), "speak": agent.speak_enabled}
+                "turns": list(agent.turns), "speak": agent.speak_enabled,
+                "volume": getattr(agent, "volume", None)}
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
@@ -1079,6 +1100,9 @@ def cmd_serve(args):
                     return self.send(200, state())
                 if self.path == "/api/speak":
                     agent.speak_enabled = bool(data.get("on"))
+                    return self.send(200, state())
+                if self.path == "/api/volume":
+                    agent.volume = set_volume(int(data.get("percent", 8)), mock=args.mock_llm)
                     return self.send(200, state())
                 if self.path == "/api/reset":
                     agent.reset()

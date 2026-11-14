@@ -68,6 +68,7 @@ pre { white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.45 ui-m
       <input id="q" type="text" placeholder="or type: which way to Cathedral Grove?">
       <button id="ask">Ask</button>
       <label style="font-size:12px"><input type="checkbox" id="speak"> Speak answers</label>
+      <label style="font-size:12px;margin-left:12px">Volume <input type="range" id="vol" min="0" max="60" step="2" value="8" style="vertical-align:middle;width:110px"> <span id="volv">8%</span></label>
       <audio id="reply" controls preload="none" style="height:32px;max-width:100%"></audio>
     </div>
   </section>
@@ -282,6 +283,10 @@ async function init() {
   sel.value = st.destination;
   $('speak').checked = !!st.speak;
   $('speak').onchange = () => api('/api/speak', { on: $('speak').checked });
+  if (st.volume != null) { $('vol').value = st.volume; $('volv').textContent = st.volume + '%'; }
+  $('vol').oninput = () => { $('volv').textContent = $('vol').value + '%'; };
+  $('vol').onchange = async () => { const r = await api('/api/volume', { percent: +$('vol').value });
+    if (r && r.volume != null) { $('vol').value = r.volume; $('volv').textContent = r.volume + '%'; } else { $('volv').textContent = 'n/a'; } };
   if (st.position) setMe(st.position);
   sel.onchange = () => api('/api/destination', { id: sel.value });
   $('step').onclick = step;
