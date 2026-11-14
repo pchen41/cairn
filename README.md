@@ -1,3 +1,13 @@
+# Cairn: an offline voice trail guide (hackathon submission)
+
+**Cairn** is our project for the On-Device AI Hackathon: Cleared for Takeoff. It's an always-on, voice-driven trail guide for Muir Woods that runs entirely on a Qualcomm Dragonwing IQ-9075, with Liquid AI's LFM3-Omni-2B on the Hexagon NPU. It warns you when you go off-route, are too slow to beat sunset, or stop moving. It answers "which way to Cathedral Grove?" at a junction, and tells you about landmarks as you approach them, with no signal needed.
+
+**Start here: [apps/cairn/README.md](apps/cairn/README.md)**
+
+The rest of this repository is the organizers' starter kit, which Cairn was built from.
+
+---
+
 # On-Device AI Hackathon: Cleared for Takeoff
 
 **LiquidAI × Qualcomm Dragonwing**

@@ -58,8 +58,23 @@ The demo runs with the board's Wi-Fi off, so the laptop reaches the board over a
 
 IQ-9075 EVK, Ubuntu 24.04, ZETIC Ixian Hexagon SDK 0.2.1, LiquidAI LFM3-Omni-2B (ZETIC v73 two-NSP package, revision `01d43f16`). The CLI reloads the model for every call.
 
-MEASUREMENTS_PLACEHOLDER
+Measured on 2026-11-13 from Cairn's own JSONL logs on the board (one replay of 50 iterations plus UI questions). Medians:
+
+| Call | Samples | Wall time | Model load | Time to first token | Decode |
+|---|---:|---:|---:|---:|---:|
+| Explain an alert, junction or landmark (cap 120 tokens) | 6 | 4.81 s | 3.76 s | 113 ms | 62.4 tok/s |
+| Answer a question (cap 120 tokens) | 2 | 4.85 s | 3.72 s | 111 ms | 61.3 tok/s |
+| Transcribe a spoken question (cap 96 tokens) | 1 | 4.23 s | 3.73 s | 74 ms | 52.4 tok/s |
+| Speak an answer (TTS, before the 60-token cap) | 2 | 11.1 s for 25.3 s of audio | | | |
+
+- 9 of 9 model calls passed every check (usage, non-empty answer, natural stop, current-request Hexagon evidence). 53 log records, 0 with errors.
+- Device evidence per call: `hexrt open … v73 … nsp2=1` and `loaded lfm3-omni-2b v73`, with the CLI reporting `target v73 (v73, 2 NSP) soc QCS9075`. CPU threads also take part, so we do not claim the work runs entirely on the NPU.
+- Most of each call's wall time is the model reload. A resident server would cut answers to under a second, which is the obvious next step.
+- These are small samples from one board, not a benchmark.
 
 ## Offline status
 
-OFFLINE_PLACEHOLDER
+- **Static audit:** no HTTP clients, sockets to other hosts, CDN, map tiles or web fonts in `cairn.py`, `run.py` or `ui.html`. The only URL is the SVG XML namespace string, which browsers never fetch. Standard library only.
+- **Runtime check:** while Cairn answered a question, the board's only established connections were loopback (the UI server) and the USB-link SSH session from the laptop.
+- **Assets on the board:** the SDK, the model package (SHA-256 verified against the package's `SHA256SUMS`), trail data and area knowledge are all local files.
+- **Not performed:** a run with the board's Wi-Fi switched off. We skipped the network-off rehearsal, so this is unverified until the judge's table.

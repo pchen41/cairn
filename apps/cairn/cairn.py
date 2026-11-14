@@ -1020,7 +1020,17 @@ def cmd_serve(args):
                 "target": agent.target(), "itinerary": agent.itinerary_view(),
                 "breadcrumbs": [[b["lat"], b["lon"]] for b in agent.breadcrumbs[-800:]],
                 "turns": list(agent.turns), "speak": agent.speak_enabled,
-                "volume": getattr(agent, "volume", None)}
+                "volume": getattr(agent, "volume", None), "route": route_via()}
+
+    def route_via():
+        """Node names on the route to the next stop, for the UI's route highlight (computed in code)."""
+        try:
+            if agent.position is None:
+                return []
+            r = agent.trails.route(agent.position, agent.target(), agent.junction_m)
+            return (r or {}).get("via", [])
+        except Exception:  # noqa: BLE001
+            return []
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
