@@ -4,6 +4,8 @@
 
 **Start here: [apps/cairn/README.md](apps/cairn/README.md)**
 
+Arduino Project Hub: https://projecthub.arduino.cc/projects/9edf5e50-9d90-4aae-8f20-cc3eb822b81d
+
 The rest of this repository is the organizers' starter kit, which Cairn was built from.
 
 ---

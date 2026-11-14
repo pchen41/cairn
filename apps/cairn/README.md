@@ -4,6 +4,8 @@ Cairn is a prototype of a phone app: an always-on trail companion for Muir Woods
 
 ![Cairn running on the IQ-9075: trail map, hold-to-talk, sample photos, and a banana slug identified on the NPU](screenshot.jpg)
 
+Arduino Project Hub: https://projecthub.arduino.cc/projects/9edf5e50-9d90-4aae-8f20-cc3eb822b81d
+
 ## Why not a cloud API call?
 
 There is no signal in the backcountry, which is exactly where a hiker needs directions. An always-on watcher that is meant to keep you safe cannot depend on a connection, so the model, the map and every decision live on the board.
